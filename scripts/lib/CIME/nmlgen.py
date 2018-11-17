@@ -697,14 +697,14 @@ class NamelistGenerator(object):
 
     # For NUOPC
     def write_nuopc_config_file(self, filename, data_list_path=None,
-                                skip_comps=None, atm_cpl_dt=None, ocn_cpl_dt=None):
+                                skip_comps=None, atm_cpl_dt=None, ocn_cpl_dt=None, rof_cpl_dt=None):
         """ Write the nuopc config file"""
         self._definition.validate(self._namelist)
         groups = self._namelist.get_group_names()
         if "nuopc_runseq" in groups:
             self._namelist.write(os.path.dirname(filename)+os.sep+"nuopc.runseq", groups=["nuopc_runseq"],
                                  format_='nuopc',sorted_groups=False,
-                             skip_comps=skip_comps, atm_cpl_dt=atm_cpl_dt, ocn_cpl_dt=ocn_cpl_dt)
+                                 skip_comps=skip_comps, atm_cpl_dt=atm_cpl_dt, ocn_cpl_dt=ocn_cpl_dt, rof_cpl_dt=rof_cpl_dt)
             groups.remove("nuopc_runseq")
 
         self._namelist.write(filename, skip_comps=skip_comps, groups=groups, format_='nuopc', sorted_groups=False)
