@@ -66,7 +66,8 @@ contains
     use med_phases_prep_ice_mod , only: med_phases_prep_ice
     use med_phases_prep_lnd_mod , only: med_phases_prep_lnd
     use med_phases_prep_wav_mod , only: med_phases_prep_wav
-    use med_phases_prep_glc_mod , only: med_phases_prep_glc
+    use med_phases_prep_glc_mod , only: med_phases_prep_glc_accum_fast
+    use med_phases_prep_glc_mod , only: med_phases_prep_glc_avg
     use med_phases_prep_rof_mod , only: med_phases_prep_lnd2rof_accum_fast
     use med_phases_prep_rof_mod , only: med_phases_prep_rof_avg
     use med_phases_prep_ocn_mod , only: med_phases_prep_ocn_map
@@ -380,10 +381,17 @@ contains
     !------------------
 
     call NUOPC_CompSetEntryPoint(gcomp, ESMF_METHOD_RUN, &
-         phaseLabelList=(/"med_phases_prep_glc"/), userRoutine=mediator_routine_Run, rc=rc)
+         phaseLabelList=(/"med_phases_prep_glc_accum_fast"/), userRoutine=mediator_routine_Run, rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
     call NUOPC_CompSpecialize(gcomp, specLabel=mediator_label_Advance, &
-         specPhaseLabel="med_phases_prep_glc", specRoutine=med_phases_prep_glc, rc=rc)
+         specPhaseLabel="med_phases_prep_glc_accum_fast", specRoutine=med_phases_prep_glc_accum_fast, rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+
+    call NUOPC_CompSetEntryPoint(gcomp, ESMF_METHOD_RUN, &
+         phaseLabelList=(/"med_phases_prep_glc_avg"/), userRoutine=mediator_routine_Run, rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    call NUOPC_CompSpecialize(gcomp, specLabel=mediator_label_Advance, &
+         specPhaseLabel="med_phases_prep_glc_avg", specRoutine=med_phases_prep_glc_avg, rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     !------------------
@@ -956,7 +964,7 @@ contains
                      call ESMF_LogWrite(trim(subname)//trim(string)//": ERROR grid_arbopt setting = "//trim(grid_arbopt), &
                           ESMF_LOGMSG_INFO, rc=rc)
                      rc = ESMF_FAILURE
-                     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+                     RETURN
 
                   endif  ! grid_arbopt
 
@@ -1424,6 +1432,9 @@ contains
     use med_map_mod             , only : med_map_MapNorm_init, med_map_RouteHandles_init
     use med_io_mod              , only : med_io_init
 
+    !DEBUG
+    use ESMF, only : ESMF_FieldBundleGet
+    !DEBUG
 
     ! input/output variables
     type(ESMF_GridComp)  :: gcomp
@@ -1606,15 +1617,22 @@ contains
             call shr_nuopc_methods_FB_reset(is_local%wrap%FBExpAccum(n1), value=czero, rc=rc)
             if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
+            !DEBUG
+            call ESMF_FieldBundleGet(is_local%wrap%FBExp(n1), fieldCount=cntn1, rc=rc)
+            if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+            write(6,*)'DEBUG: FBExp for ',n1,'has fieldcount = ',cntn1
+            !DEBUG
+
             is_local%wrap%FBExpAccumCnt(n1) = 0
 
          endif
          if (mastertask) call shr_sys_flush(logunit)
 
+
          ! These is FBImp mapped to different grids. FBImp(n1,n1) is handled above
 
          do n2 = 1,ncomps
-            if (n1 /= n2 .and. &
+            if ( n1 /= n2 .and. &
                  is_local%wrap%med_coupling_active(n1,n2) .and. &
                  ESMF_StateIsCreated(is_local%wrap%NStateImp(n1),rc=rc) .and. &
                  ESMF_StateIsCreated(is_local%wrap%NStateExp(n2),rc=rc)) then
@@ -1625,6 +1643,7 @@ contains
                     STflds=is_local%wrap%NStateImp(n1), &
                     name='FBImp'//trim(compname(n1))//'_'//trim(compname(n2)), rc=rc)
                if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+
             endif
          enddo
 
@@ -2021,7 +2040,7 @@ contains
                   opt_n = 1, alarmname = 'alarm_glc_avg', rc=rc)
              if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-          else if (trim(glc_avg_period) == 'year') then
+          else if (trim(glc_avg_period) == 'yearly') then
              call shr_nuopc_time_alarmInit(mediatorclock, glc_avg_alarm, 'nyears', &
                   opt_n = 1, alarmname = 'alarm_glc_avg', rc=rc)
              if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return

@@ -1290,7 +1290,6 @@ contains
 
     ! 'Fraction of glacier area'
     call shr_nuopc_fldList_AddFld(fldListFr(compglc)%flds, 'Sg_ice_covered', fldindex=n1)
-    call shr_nuopc_fldList_AddMap(FldListFr(compglc)%flds(n1), compglc, complnd, mapconsf, 'unset', glc2lnd_fmapname) ! TODO: normalization?
     if (glc_nec > 0) then
        name = 'Sg_ice_covered'
        do num = 0, glc_nec
@@ -1332,54 +1331,44 @@ contains
     !-----------------------------
 
     ! glc fields with multiple elevation classes: lnd->glc
-    ! - fields sent from lnd->med are in multiple elevation classes
+    ! - fields sent from lnd->med ARE in multiple elevation classes
     ! - fields sent from med->glc do NOT have elevation classes
-    ! - need to keep track of the l2x fields destined for glc in the
-    !   additional variables, l2x_to_glc. This is needed so that can set up
-    !   additional fields holding accumulated quantities of just these fields.
 
     ! Sets a coupling field for all glc elevation classes (1:glc_nec) plus bare land (index 0).
     ! Note that, if glc_nec = 0, then we don't create any coupling fields (not even the bare land (0) fldindex)
 
-    ! 'New glacier ice flux'
     if (glc_nec > 0) then
-       do num = 0, glc_nec
-          name = 'Flgl_qice'
-          cnum = glc_elevclass_as_string(num)
-          call shr_nuopc_fldList_AddFld(fldListFr(complnd)%flds   , 'Flgl_qice'//trim(cnum), fldindex=n1)
-          call shr_nuopc_fldList_AddFld(fldListMed_l2x_to_glc%flds, 'Flgl_qice'//trim(cnum))
-       end do
-    end if
-    call shr_nuopc_fldList_AddFld(fldListTo(compglc)%flds, 'Flgl_qice')
-    ! TODO: enter merging info
-    call shr_nuopc_fldList_AddMap(FldListFr(complnd)%flds(n1), complnd, compglc, mapconsf, 'none', lnd2glc_fmapname)
 
-    ! 'Surface temperature of glacier'
-    if (glc_nec > 0) then
-       name = 'Sl_tsrf'
+       ! 'New glacier ice flux'
        do num = 0, glc_nec
           cnum = glc_elevclass_as_string(num)
-          call shr_nuopc_fldList_AddFld(fldListFr(complnd)%flds   , 'Sl_tsrf'//trim(cnum), fldindex=n1)
-          call shr_nuopc_fldList_AddFld(fldListMed_l2x_to_glc%flds, 'Sl_tsrf'//trim(cnum))
+          call shr_nuopc_fldList_AddFld(fldListFr(complnd)%flds, 'Flgl_qice'//trim(cnum), fldindex=n1)
+          call shr_nuopc_fldList_AddMap(FldListFr(complnd)%flds(n1), complnd, compglc, mapconsf, 'none', lnd2glc_fmapname)
        end do
-    end if
-    call shr_nuopc_fldList_AddFld(fldListTo(compglc)%flds, 'Sl_tsrf')
-    ! TODO: enter merging info
-    call shr_nuopc_fldList_AddMap(FldListFr(complnd)%flds(n1), complnd, compglc, mapconsf, 'none', lnd2glc_fmapname)
+       call shr_nuopc_fldList_AddFld(fldListTo(compglc)%flds, 'Flgl_qice')
+         
+       ! 'Surface temperature of glacier'
+       do num = 0, glc_nec
+          cnum = glc_elevclass_as_string(num)
+          call shr_nuopc_fldList_AddFld(fldListFr(complnd)%flds, 'Sl_tsrf'//trim(cnum), fldindex=n1)
+          call shr_nuopc_fldList_AddMap(FldListFr(complnd)%flds(n1), complnd, compglc, mapbilnr, 'none', lnd2glc_smapname)
+       end do
+       call shr_nuopc_fldList_AddFld(fldListTo(compglc)%flds, 'Sl_tsrf')
 
-    ! Sl_topo is sent from lnd -> med, but is NOT sent to glc (it is only used for the remapping in the mediator)
-
-    ! 'Surface height'
-    if (glc_nec > 0) then
-       name = 'Sl_topo'
+       ! 'Surface height'
+       ! Note : Sl_topo is sent from lnd -> med, but is NOT sent to glc (only used for the remapping in the mediator)
        do num = 0, glc_nec
           cnum = glc_elevclass_as_string(num)
           call shr_nuopc_fldList_AddFld(fldListFr(complnd)%flds   , 'Sl_topo'//trim(cnum), fldindex=n1)
-          call shr_nuopc_fldList_AddFld(fldListMed_l2x_to_glc%flds, 'Sl_topo'//trim(cnum))
+          call shr_nuopc_fldList_AddMap(FldListFr(complnd)%flds(n1), complnd, compglc, mapbilnr, 'none', lnd2glc_smapname)
        end do
+       call shr_nuopc_fldList_AddFld(fldListTo(compglc)%flds, 'Sl_topo')
+
     end if
-    call shr_nuopc_fldList_AddFld(fldListTo(compglc)%flds, 'Sl_topo')
-    call shr_nuopc_fldList_AddMap(FldListFr(complnd)%flds(n1), complnd, compglc, mapconsf, 'none', lnd2glc_fmapname)
+
+    !-----------------------------
+    ! CO2
+    !-----------------------------
 
     if (flds_co2a) then
 

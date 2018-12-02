@@ -153,8 +153,6 @@ contains
     ! Map elevation class 0 (bare land) and ice elevation classes
     ! ------------------------------------------------------------------------
 
-    call map_bare_land(l2x_l, landfrac_l, fieldname_trimmed, mapper, data_g_bareland)
-
     ! Start by setting the output data equal to the bare land value everywhere; this will
     ! later get overwritten in places where we have ice
     !
@@ -163,12 +161,17 @@ contains
     ! current glint implementation, which sets acab and artm to 0 over ocean (although
     ! notes that this could lead to a loss of conservation). Figure out how to handle
     ! this case.
+
+    ! Map bare land
+    call map_bare_land(l2x_l, landfrac_l, fieldname_trimmed, mapper, data_g_bareland)
+
+    ! Set the output data to bare land
     data_g(:) = data_g_bareland(:)
 
     ! Map the SMB to ice-covered cells
-    call map_ice_covered(l2x_l, landfrac_l, fieldname_trimmed, &
-         glc_topo, mapper, data_g_ice_covered)
+    call map_ice_covered(l2x_l, landfrac_l, fieldname_trimmed, glc_topo, mapper, data_g_ice_covered)
 
+    ! Overwrite the output data for the ice-covered cells
     where (glc_elevclass /= 0)
        data_g = data_g_ice_covered
     end where

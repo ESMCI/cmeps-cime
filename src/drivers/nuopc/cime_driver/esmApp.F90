@@ -4,7 +4,7 @@ program esmApp
   ! Generic ESM application driver
   !-----------------------------------------------------------------------------
 
-  use ESMF, only             : ESMF_Initialize, ESMF_CALKIND_GREGORIAN, ESMF_LOGKIND_MULTI
+  use ESMF, only             : ESMF_Initialize, ESMF_CALKIND_GREGORIAN, ESMF_CALKIND_NOLEAP, ESMF_LOGKIND_MULTI
   use ESMF, only             : ESMF_END_ABORT, ESMF_LogFoundError, ESMF_Finalize, ESMF_LOGERR_PASSTHRU
   use ESMF, only             : ESMF_GridCompSetServices, ESMF_GridCompFinalize, ESMF_LogSet, ESMF_LogWrite
   use ESMF, only             : ESMF_GridCompDestroy, ESMF_LOGMSG_INFO, ESMF_GridComp, ESMF_GridCompRun
@@ -22,11 +22,13 @@ program esmApp
   ! Initialize ESMF
   !-----------------------------------------------------------------------------
 #ifdef DEBUG
+  ! call ESMF_Initialize(logkindflag=ESMF_LOGKIND_MULTI, logappendflag=.false., &
+  !      defaultCalkind=ESMF_CALKIND_GREGORIAN, ioUnitLBound=5001, ioUnitUBound=5101, rc=rc)
   call ESMF_Initialize(logkindflag=ESMF_LOGKIND_MULTI, logappendflag=.false., &
-    defaultCalkind=ESMF_CALKIND_GREGORIAN, ioUnitLBound=5001, ioUnitUBound=5101, rc=rc)
+       defaultCalkind=ESMF_CALKIND_NOLEAP, ioUnitLBound=5001, ioUnitUBound=5101, rc=rc)
 #else
   call ESMF_Initialize(logkindflag=ESMF_LOGKIND_MULTI_ON_ERROR, logappendflag=.false., &
-    defaultCalkind=ESMF_CALKIND_GREGORIAN, ioUnitLBound=5001, ioUnitUBound=5101, rc=rc)
+       defaultCalkind=ESMF_CALKIND_GREGORIAN, ioUnitLBound=5001, ioUnitUBound=5101, rc=rc)
 #endif
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &

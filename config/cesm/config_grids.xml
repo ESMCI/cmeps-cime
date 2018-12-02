@@ -1408,13 +1408,14 @@
 
     <domain name="r01">
       <nx>3600</nx> <ny>1800</ny>
-      <!-- TODO: create a domain file for r01 -->
+      <!-- TODO (mvertens, 2018-12-02): create a domain file for this  -->
       <desc>r01 is 1/10 degree river routing grid:</desc>
       <support>For experimental use by high resolution grids</support>
     </domain>
 
     <domain name="JRA025">
       <nx>1440</nx> <ny>720</ny>
+      <!-- TODO (mvertens, 2018-12-02): create a domain file for this  -->
       <desc>JRA is 0.25 degree runoff grid for use with JRA-55 runoff data</desc>
     </domain>
 
@@ -1422,6 +1423,7 @@
 
     <domain name="gland20">
       <nx>76</nx> <ny>141</ny>
+      <mesh driver="nuopc">$DIN_LOC_ROOT/share/meshes/gland_20km_c150511_ESMFmesh.nc</mesh>
       <desc>20-km Greenland grid</desc>
     </domain>
 

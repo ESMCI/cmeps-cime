@@ -5,15 +5,18 @@ module med_connectors_mod
   !-----------------------------------------------------------------------------
 
   use ESMF                  , only : ESMF_SUCCESS, ESMF_LogWrite, ESMF_LOGMSG_INFO, ESMF_Failure
-  use ESMF                  , only : ESMF_State, ESMF_Clock, ESMF_GridComp
+  use ESMF                  , only : ESMF_State, ESMF_GridComp, ESMF_GridCompGet
+  use esmFlds               , only : compatm, compocn, compice, complnd, comprof, compwav, compglc
   use med_internalstate_mod , only : InternalState
   use shr_nuopc_methods_mod , only : shr_nuopc_methods_ChkErr
   use med_constants_mod     , only : spval => med_constants_spval
   use med_constants_mod     , only : czero => med_constants_czero
   use med_constants_mod     , only : dbug_flag => med_constants_dbug_flag
+  use perf_mod              , only : t_startf, t_stopf
 
   implicit none
   private
+
   character(*)      , parameter :: u_FILE_u = &
        __FILE__
 
@@ -28,6 +31,7 @@ module med_connectors_mod
   public med_connectors_prep_med2rof
   public med_connectors_prep_med2wav
   public med_connectors_prep_med2glc
+
   public med_connectors_post_atm2med
   public med_connectors_post_ocn2med
   public med_connectors_post_ice2med
@@ -37,7 +41,7 @@ module med_connectors_mod
   public med_connectors_post_glc2med
 
   !--------------------------------------------------------------------------
-  ! Private
+  ! Private interfaces
   !--------------------------------------------------------------------------
 
   private med_connectors_prep_generic
@@ -48,198 +52,109 @@ module med_connectors_mod
 contains
 !-----------------------------------------------------------------------------
 
-  subroutine med_connectors_prep_generic(gcomp, type, rc)
+  subroutine med_connectors_prep_generic(gcomp, comp_index, compname, rc)
 
-    use ESMF                  , only : ESMF_GridCompGet
-    use esmFlds               , only : compatm, compocn, compice
-    use esmFlds               , only : complnd, comprof, compwav, compglc
-    use med_infodata_mod      , only : med_infodata_CopyStateToInfodata
-    use med_infodata_mod      , only : med_infodata_CopyInfodataToState
     use med_infodata_mod      , only : med_infodata
-    use shr_nuopc_methods_mod , only : shr_nuopc_methods_State_reset
+    use med_infodata_mod      , only : med_infodata_CopyInfodataToState
     use shr_nuopc_methods_mod , only : shr_nuopc_methods_FB_copy
-    use perf_mod              , only : t_startf, t_stopf
+    use shr_nuopc_methods_mod , only : shr_nuopc_methods_State_reset
+
     ! input/output variables
     type(ESMF_GridComp)          :: gcomp
-    character(len=*), intent(in) :: type
+    integer, intent(in)          :: comp_index
+    character(len=*), intent(in) :: compname
     integer, intent(out)         :: rc
 
     ! local variables
-    type(ESMF_Clock)    :: clock
     type(InternalState) :: is_local
-    logical             :: diagnose
-    logical             :: connected
-    integer             :: n
     integer             :: dbrc
     character(len=*),parameter :: subname='(med_connectors_prep_generic)'
     !---------------------------------------------
+
+    rc = ESMF_SUCCESS
+
     call t_startf('MED:'//subname)
 
     if (dbug_flag > 5) then
-      call ESMF_LogWrite(trim(subname)//trim(type)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
+      call ESMF_LogWrite(trim(subname)//trim(compname)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     rc = ESMF_SUCCESS
 
-    ! query the Component for its clock, importState and exportState
-    call ESMF_GridCompGet(gcomp, clock=clock, rc=rc)
-    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
+    !-------------------------
     ! Get the internal state from Component.
+    !-------------------------
+
     nullify(is_local%wrap)
     call ESMF_GridCompGetInternalState(gcomp, is_local, rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-
     !-------------------------
-    ! diagnose export state
-    ! update scalar data in Exp and Imp State
+    ! diagnose export state update scalar data in Exp and Imp State
     !-------------------------
+      
+    is_local%wrap%conn_prep_cnt(comp_index) = is_local%wrap%conn_prep_cnt(comp_index) + 1
 
-    select case (type)
+    call shr_nuopc_methods_State_reset(is_local%wrap%NStateExp(comp_index), value=spval, rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    case('atm')
-      is_local%wrap%conn_prep_cnt(compatm) = is_local%wrap%conn_prep_cnt(compatm) + 1
-      call shr_nuopc_methods_State_reset(is_local%wrap%NStateExp(compatm), value=spval, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%NStateExp(compatm), is_local%wrap%FBExp(compatm), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_connectors_diagnose(is_local%wrap%NStateExp(compatm), is_local%wrap%conn_prep_cnt(compatm), "med_to_atm", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateExp(compatm),'cpl2atm',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateImp(compatm),'cpl2atm',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_nuopc_methods_FB_copy(is_local%wrap%NStateExp(comp_index), is_local%wrap%FBExp(comp_index), rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    case('ocn')
-      is_local%wrap%conn_prep_cnt(compocn) = is_local%wrap%conn_prep_cnt(compocn) + 1
-      call shr_nuopc_methods_State_reset(is_local%wrap%NStateExp(compocn), value=spval, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%NStateExp(compocn), is_local%wrap%FBExp(compocn), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_connectors_diagnose(is_local%wrap%NStateExp(compocn), is_local%wrap%conn_prep_cnt(compocn), "med_to_ocn", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateExp(compocn),'cpl2ocn',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateImp(compocn),'cpl2ocn',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    call med_connectors_diagnose(is_local%wrap%NStateExp(comp_index), is_local%wrap%conn_prep_cnt(comp_index), &
+         "med_to_"// trim(compname), rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    case('ice')
-      is_local%wrap%conn_prep_cnt(compice) = is_local%wrap%conn_prep_cnt(compice) + 1
-      call shr_nuopc_methods_State_reset(is_local%wrap%NStateExp(compice), value=spval, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%NStateExp(compice), is_local%wrap%FBExp(compice), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_connectors_diagnose(is_local%wrap%NStateExp(compice), is_local%wrap%conn_prep_cnt(compice), "med_to_ice", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateExp(compice),'cpl2ice',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateImp(compice),'cpl2ice',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateExp(comp_index), &
+         'cpl2' //trim(compname), is_local%wrap%mpicom,rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    case('lnd')
-      is_local%wrap%conn_prep_cnt(complnd) = is_local%wrap%conn_prep_cnt(complnd) + 1
-      call shr_nuopc_methods_State_reset(is_local%wrap%NStateExp(complnd), value=spval, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%NStateExp(complnd), is_local%wrap%FBExp(complnd), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_connectors_diagnose(is_local%wrap%NStateExp(complnd), is_local%wrap%conn_prep_cnt(complnd), "med_to_lnd", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateExp(complnd),'cpl2lnd',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateImp(complnd),'cpl2lnd',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-    case('rof')
-      is_local%wrap%conn_prep_cnt(comprof) = is_local%wrap%conn_prep_cnt(comprof) + 1
-      call shr_nuopc_methods_State_reset(is_local%wrap%NStateExp(comprof), value=spval, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%NStateExp(comprof), is_local%wrap%FBExp(comprof), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_connectors_diagnose(is_local%wrap%NStateExp(comprof), is_local%wrap%conn_prep_cnt(comprof), "med_to_rof", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateExp(comprof),'cpl2rof',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateImp(comprof),'cpl2rof',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-    case('wav')
-      is_local%wrap%conn_prep_cnt(compwav) = is_local%wrap%conn_prep_cnt(compwav) + 1
-      call shr_nuopc_methods_State_reset(is_local%wrap%NStateExp(compwav), value=spval, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%NStateExp(compwav), is_local%wrap%FBExp(compwav), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_connectors_diagnose(is_local%wrap%NStateExp(compwav), is_local%wrap%conn_prep_cnt(compwav), "med_to_wav", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateExp(compwav),'cpl2wav',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateImp(compwav),'cpl2wav',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-    case('glc')
-      is_local%wrap%conn_prep_cnt(compglc) = is_local%wrap%conn_prep_cnt(compglc) + 1
-      call shr_nuopc_methods_State_reset(is_local%wrap%NStateExp(compglc), value=spval, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%NStateExp(compglc), is_local%wrap%FBExp(compglc), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_connectors_diagnose(is_local%wrap%NStateExp(compglc), is_local%wrap%conn_prep_cnt(compglc), "med_to_glc", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateExp(compglc),'cpl2glc',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateImp(compglc),'cpl2glc',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-    case default
-      rc = ESMF_Failure
-      call ESMF_LogWrite(trim(subname)//trim(type)//" unsupported", ESMF_LOGMSG_INFO, rc=dbrc)
-
-    end select
+    ! TODO (mvertens, 2018-12-01): why are we copying to the import state?
+    call med_infodata_CopyInfodataToState(med_infodata,is_local%wrap%NStateImp(comp_index), &
+         'cpl2'//trim(compname), is_local%wrap%mpicom,rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
-      call ESMF_LogWrite(trim(subname)//trim(type)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
+       call ESMF_LogWrite(trim(subname)//trim(compname)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     call t_stopf('MED:'//subname)
-
+    
   end subroutine med_connectors_prep_generic
 
   !-----------------------------------------------------------------------------
 
-  subroutine med_connectors_post_generic(gcomp, type, rc)
+  subroutine med_connectors_post_generic(gcomp, comp_index, compname, rc)
 
-    use ESMF                  , only : ESMF_GridCompGet
-    use esmFlds               , only : compatm, compocn, compice
-    use esmFlds               , only : complnd, comprof, compwav, compglc
-    use shr_nuopc_methods_mod , only : shr_nuopc_methods_FB_copy
-    use shr_nuopc_methods_mod , only : shr_nuopc_methods_FB_reset
     use med_infodata_mod      , only : med_infodata
     use med_infodata_mod      , only : med_infodata_CopyStateToInfodata
-    use perf_mod              , only : t_startf, t_stopf
+    use shr_nuopc_methods_mod , only : shr_nuopc_methods_FB_copy
+    use shr_nuopc_methods_mod , only : shr_nuopc_methods_FB_reset
 
     ! input/output variables
-    type(ESMF_GridComp)           :: gcomp
-    character(len=*), intent(in)  :: type
-    integer,          intent(out) :: rc
+    type(ESMF_GridComp)            :: gcomp
+    integer          , intent(in)  :: comp_index 
+    character(len=*) , intent(in)  :: compname
+    integer          , intent(out) :: rc
 
     ! local variables
-    type(ESMF_Clock)    :: clock
     type(InternalState) :: is_local
     integer             :: dbrc
     character(len=*),parameter :: subname='(med_connectors_post_generic)'
     !---------------------------------------------
+
+    rc = ESMF_SUCCESS
 
     ! Note: for information obtained by the mediator always write out the state
     ! if statewrite_flag is .true.
     call t_startf('MED:'//subname)
 
     if (dbug_flag > 5) then
-      call ESMF_LogWrite(trim(subname)//trim(type)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
+      call ESMF_LogWrite(trim(subname)//trim(compname)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
-    rc = ESMF_SUCCESS
 
-    ! query the Component for its clock, importState and exportState
-    call ESMF_GridCompGet(gcomp, clock=clock, rc=rc)
-    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
+    !-------------------------
     ! Get the internal state from Component.
+    !-------------------------
+
     nullify(is_local%wrap)
     call ESMF_GridCompGetInternalState(gcomp, is_local, rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -249,102 +164,38 @@ contains
     ! copy import state scalar data to local datatype
     !-------------------------
 
-    select case (type)
+    is_local%wrap%conn_post_cnt(comp_index) = is_local%wrap%conn_post_cnt(comp_index) + 1
 
-    case('atm')
-      is_local%wrap%conn_post_cnt(compatm) = is_local%wrap%conn_post_cnt(compatm) + 1
-      call med_connectors_diagnose(is_local%wrap%NStateImp(compatm), is_local%wrap%conn_post_cnt(compatm), " med_from_atm", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyStateToInfodata(is_local%wrap%NStateImp(compatm),med_infodata,'atm2cpl',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_reset(is_local%wrap%FBImp(compatm,compatm), value=czero, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%FBImp(compatm,compatm), is_local%wrap%NStateImp(compatm), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    ! The following will write out the fields in is_local%wrap%NStateImp(comp_index) to local netcdf files
+    ! and set the time index in the files to is_local%wrap%conn_post_cnt(comp_index)
+    call med_connectors_diagnose(is_local%wrap%NStateImp(comp_index), is_local%wrap%conn_post_cnt(comp_index), &
+         " med_from_"//trim(compname), rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    case('ocn')
-      is_local%wrap%conn_post_cnt(compocn) = is_local%wrap%conn_post_cnt(compocn) + 1
-      call med_connectors_diagnose(is_local%wrap%NStateImp(compocn), is_local%wrap%conn_post_cnt(compocn), " med_from_ocn", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyStateToInfodata(is_local%wrap%NStateImp(compocn),med_infodata,'ocn2cpl',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_reset(is_local%wrap%FBImp(compocn,compocn), value=czero, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%FBImp(compocn,compocn), is_local%wrap%NStateImp(compocn), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    ! The following copies the scalar data from State into the med_infodata instance on the root pe 
+    ! then broadcasts the data to all PETs in the mediator
+    call med_infodata_CopyStateToInfodata(is_local%wrap%NStateImp(comp_index), med_infodata, &
+         trim(compname) // '2cpl', is_local%wrap%mpicom, rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    case('ice')
-      is_local%wrap%conn_post_cnt(compice) = is_local%wrap%conn_post_cnt(compice) + 1
-      call med_connectors_diagnose(is_local%wrap%NStateImp(compice), is_local%wrap%conn_post_cnt(compice), " med_from_ice", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyStateToInfodata(is_local%wrap%NStateImp(compice),med_infodata,'ice2cpl',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_reset(is_local%wrap%FBImp(compice,compice), value=czero, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%FBImp(compice,compice), is_local%wrap%NStateImp(compice), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_nuopc_methods_FB_reset(is_local%wrap%FBImp(comp_index,comp_index), value=czero, rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    case('lnd')
-      is_local%wrap%conn_post_cnt(complnd) = is_local%wrap%conn_post_cnt(complnd) + 1
-      call med_connectors_diagnose(is_local%wrap%NStateImp(complnd), is_local%wrap%conn_post_cnt(complnd), " med_from_lnd", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyStateToInfodata(is_local%wrap%NStateImp(complnd),med_infodata,'lnd2cpl',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_reset(is_local%wrap%FBImp(complnd,complnd), value=czero, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%FBImp(complnd,complnd), is_local%wrap%NStateImp(complnd), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-    case('rof')
-      is_local%wrap%conn_post_cnt(comprof) = is_local%wrap%conn_post_cnt(comprof) + 1
-      call med_connectors_diagnose(is_local%wrap%NStateImp(comprof), is_local%wrap%conn_post_cnt(comprof), " med_from_rof", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyStateToInfodata(is_local%wrap%NStateImp(comprof),med_infodata,'rof2cpl',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_reset(is_local%wrap%FBImp(comprof,comprof), value=czero, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%FBImp(comprof,comprof), is_local%wrap%NStateImp(comprof), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-    case('wav')
-      is_local%wrap%conn_post_cnt(compwav) = is_local%wrap%conn_post_cnt(compwav) + 1
-      call med_connectors_diagnose(is_local%wrap%NStateImp(compwav), is_local%wrap%conn_post_cnt(compwav), " med_from_wav", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyStateToInfodata(is_local%wrap%NStateImp(compwav),med_infodata,'wav2cpl',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_reset(is_local%wrap%FBImp(compwav,compwav), value=czero, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%FBImp(compwav,compwav), is_local%wrap%NStateImp(compwav), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-    case('glc')
-      is_local%wrap%conn_post_cnt(compglc) = is_local%wrap%conn_post_cnt(compglc) + 1
-      call med_connectors_diagnose(is_local%wrap%NStateImp(compglc), is_local%wrap%conn_post_cnt(compglc), " med_from_glc", rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call med_infodata_CopyStateToInfodata(is_local%wrap%NStateImp(compglc),med_infodata,'glc2cpl',is_local%wrap%mpicom,rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_reset(is_local%wrap%FBImp(compglc,compglc), value=czero, rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-      call shr_nuopc_methods_FB_copy(is_local%wrap%FBImp(compglc,compglc), is_local%wrap%NStateImp(compglc), rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-    case default
-      rc = ESMF_Failure
-      call ESMF_LogWrite(trim(subname)//trim(type)//" unsupported", ESMF_LOGMSG_INFO, rc=dbrc)
-
-    end select
+    ! The following copies is_local%wrap%NStateImp(comp_index) to is_local%wrap%FBImp(comp_index,comp_index)
+    call shr_nuopc_methods_FB_copy(is_local%wrap%FBImp(comp_index,comp_index), is_local%wrap%NStateImp(comp_index), rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
-      call ESMF_LogWrite(trim(subname)//trim(type)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
+       call ESMF_LogWrite(trim(subname)//trim(compname)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     call t_stopf('MED:'//subname)
-
   end subroutine med_connectors_post_generic
 
   !-----------------------------------------------------------------------------
 
   subroutine med_connectors_prep_med2atm(gcomp, rc)
-    use perf_mod, only : t_startf, t_stopf
+
+    ! input/output variables
     type(ESMF_GridComp)  :: gcomp
     integer, intent(out) :: rc
 
@@ -352,21 +203,20 @@ contains
     integer             :: dbrc
     character(len=*),parameter :: subname='(med_connectors_prep_med2atm)'
     !---------------------------------------------
-    call t_startf('MED:'//subname)
 
+    call t_startf('MED:'//subname)
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_prep_generic(gcomp, 'atm', rc=rc)
+    call med_connectors_prep_generic(gcomp, compatm, 'atm', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     call t_stopf('MED:'//subname)
-
   end subroutine med_connectors_prep_med2atm
 
   !-----------------------------------------------------------------------------
@@ -380,18 +230,19 @@ contains
     character(len=*),parameter :: subname='(med_connectors_prep_med2ocn)'
     !---------------------------------------------
 
+    call t_startf('MED:'//subname)
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_prep_generic(gcomp, 'ocn', rc=rc)
+    call med_connectors_prep_generic(gcomp, compocn, 'ocn', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
-
+    call t_stopf('MED:'//subname)
   end subroutine med_connectors_prep_med2ocn
 
   !-----------------------------------------------------------------------------
@@ -405,18 +256,19 @@ contains
     character(len=*),parameter :: subname='(med_connectors_prep_med2ice)'
     !---------------------------------------------
 
+    call t_startf('MED:'//subname)
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_prep_generic(gcomp, 'ice', rc=rc)
+    call med_connectors_prep_generic(gcomp, compice, 'ice', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
-
+    call t_stopf('MED:'//subname)
   end subroutine med_connectors_prep_med2ice
 
   !-----------------------------------------------------------------------------
@@ -430,18 +282,19 @@ contains
     character(len=*),parameter :: subname='(med_connectors_prep_med2lnd)'
     !---------------------------------------------
 
+    call t_startf('MED:'//subname)
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_prep_generic(gcomp, 'lnd', rc=rc)
+    call med_connectors_prep_generic(gcomp, complnd, 'lnd', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
-
+    call t_stopf('MED:'//subname)
   end subroutine med_connectors_prep_med2lnd
 
   !-----------------------------------------------------------------------------
@@ -455,18 +308,19 @@ contains
     character(len=*),parameter :: subname='(med_connectors_prep_med2rof)'
     !---------------------------------------------
 
+    call t_startf('MED:'//subname)
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_prep_generic(gcomp, 'rof', rc=rc)
+    call med_connectors_prep_generic(gcomp, comprof, 'rof', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
-
+    call t_stopf('MED:'//subname)
   end subroutine med_connectors_prep_med2rof
 
   !-----------------------------------------------------------------------------
@@ -480,18 +334,19 @@ contains
     character(len=*),parameter :: subname='(med_connectors_prep_med2wav)'
     !---------------------------------------------
 
+    call t_startf('MED:'//subname)
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_prep_generic(gcomp, 'wav', rc=rc)
+    call med_connectors_prep_generic(gcomp, compwav, 'wav', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
-
+    call t_stopf('MED:'//subname)
   end subroutine med_connectors_prep_med2wav
 
   !-----------------------------------------------------------------------------
@@ -505,18 +360,19 @@ contains
     character(len=*),parameter :: subname='(med_connectors_prep_med2glc)'
     !---------------------------------------------
 
+    call t_startf('MED:'//subname)
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_prep_generic(gcomp, 'glc', rc=rc)
+    call med_connectors_prep_generic(gcomp, compglc, 'glc', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
       call ESMF_LogWrite(trim(subname)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
-
+    call t_stopf('MED:'//subname)
   end subroutine med_connectors_prep_med2glc
 
   !-----------------------------------------------------------------------------
@@ -535,7 +391,7 @@ contains
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_post_generic(gcomp, 'atm', rc=rc)
+    call med_connectors_post_generic(gcomp, compatm, 'atm', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
@@ -560,7 +416,7 @@ contains
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_post_generic(gcomp, 'ocn', rc=rc)
+    call med_connectors_post_generic(gcomp, compocn, 'ocn', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
@@ -585,7 +441,7 @@ contains
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_post_generic(gcomp, 'ice', rc=rc)
+    call med_connectors_post_generic(gcomp, compice, 'ice', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
@@ -610,7 +466,7 @@ contains
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_post_generic(gcomp, 'lnd', rc=rc)
+    call med_connectors_post_generic(gcomp, complnd, 'lnd', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
@@ -635,7 +491,7 @@ contains
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_post_generic(gcomp, 'rof', rc=rc)
+    call med_connectors_post_generic(gcomp, comprof, 'rof', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
@@ -660,7 +516,7 @@ contains
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_post_generic(gcomp, 'wav', rc=rc)
+    call med_connectors_post_generic(gcomp, compwav, 'wav', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
@@ -685,7 +541,7 @@ contains
     endif
     rc = ESMF_SUCCESS
 
-    call med_connectors_post_generic(gcomp, 'glc', rc=rc)
+    call med_connectors_post_generic(gcomp, compglc, 'glc', rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 5) then
@@ -717,7 +573,7 @@ contains
     !---------------------------------------------
 
     if (dbug_flag > 5) then
-      call ESMF_LogWrite(trim(subname)//trim(string)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
+       call ESMF_LogWrite(trim(subname)//trim(string)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     rc = ESMF_SUCCESS
 
@@ -730,23 +586,23 @@ contains
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (dbug_flag > 1) then
-      call shr_nuopc_methods_State_diagnose(State, string=trim(subname)//trim(string), rc=rc)
+       call shr_nuopc_methods_State_diagnose(State, string=trim(subname)//trim(string), rc=rc)
     endif
 
     ! Write out the fields in State to netcdf files
     if (cntr > 0 .and. statewrite_flag) then
-      call ESMF_LogWrite(trim(subname)//trim(string)//": writing out fields", ESMF_LOGMSG_INFO, rc=dbrc)
-      call NUOPC_Write(State, &
-        fieldnamelist(1:fieldCount), &
-        "field_"//trim(string)//"_", timeslice=cntr, &
-        overwrite=.true., relaxedFlag=.true., rc=rc)
-      if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+       call ESMF_LogWrite(trim(subname)//trim(string)//": writing out fields", ESMF_LOGMSG_INFO, rc=dbrc)
+       call NUOPC_Write(State, &
+            fieldnamelist(1:fieldCount), &
+            "field_"//trim(string)//"_", timeslice=cntr, &
+            overwrite=.true., relaxedFlag=.true., rc=rc)
+       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
     endif
 
     deallocate(fieldnamelist)
 
     if (dbug_flag > 5) then
-      call ESMF_LogWrite(trim(subname)//trim(string)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
+       call ESMF_LogWrite(trim(subname)//trim(string)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
 
   end subroutine med_connectors_diagnose

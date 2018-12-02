@@ -17,6 +17,7 @@ module lnd_comp_nuopc
   use med_constants_mod     , only : shr_file_getloglevel, shr_file_setloglevel
   use med_constants_mod     , only : shr_file_setIO, shr_file_getUnit
   use med_constants_mod     , only : shr_cal_ymd2date, shr_cal_noleap, shr_cal_gregorian
+  use med_constants_mod     , only : dbug_flag=>med_constants_dbug_flag
   use shr_nuopc_scalars_mod , only : flds_scalar_name
   use shr_nuopc_scalars_mod , only : flds_scalar_num
   use shr_nuopc_scalars_mod , only : flds_scalar_index_nx
@@ -369,7 +370,7 @@ contains
     ! diagnostics
     !--------------------------------
 
-    if (debug_export > 0) then
+    if (dbug_flag > 1) then
        call shr_nuopc_methods_State_diagnose(exportState,subname//':ES',rc=rc)
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
     endif
@@ -412,7 +413,9 @@ contains
     !-------------------------------------------------------------------------------
 
     rc = ESMF_SUCCESS
-    call ESMF_LogWrite(subname//' called', ESMF_LOGMSG_INFO, rc=dbrc)
+    if (dbug_flag > 1) then
+       call ESMF_LogWrite(subname//' called', ESMF_LOGMSG_INFO, rc=dbrc)
+    end if
 
     call shr_nuopc_memcheck(subname, 5, my_task==master_task)
 
@@ -428,7 +431,7 @@ contains
     call NUOPC_ModelGet(gcomp, modelClock=clock, importState=importState, exportState=exportState, rc=rc)
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    if (debug_export > 0 .and. my_task == master_task) then
+    if (dbug_flag > 1 .and. my_task == master_task) then
        call shr_nuopc_methods_Clock_TimePrint(clock,subname//'clock',rc=rc)
     endif
 
@@ -485,14 +488,13 @@ contains
     ! diagnostics
     !--------------------------------
 
-    if (debug_export > 0) then
+    if (dbug_flag > 1) then
        call shr_nuopc_methods_State_diagnose(exportState,subname//':ES',rc=rc)
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
     endif
     if (my_task == master_task) then
        call shr_nuopc_log_clock_advance(clock, 'LND', logunit)
     endif
-    call ESMF_LogWrite(subname//' done', ESMF_LOGMSG_INFO, rc=dbrc)
 
     call shr_file_setLogLevel(shrloglev)
     call shr_file_setLogUnit (shrlogunit)

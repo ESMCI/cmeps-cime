@@ -277,13 +277,17 @@ contains
           do n = 1,ncomps
              if (is_local%wrap%comp_present(n)) then
                 if (ESMF_FieldBundleIsCreated(is_local%wrap%FBimp(n,n),rc=rc)) then
-                   call med_infodata_GetData(med_infodata, ncomp=n, nx=nx, ny=ny)
+                   call med_infodata_GetData(med_infodata, ncomp=n, nx=nx, ny=ny, rc=rc)
+                   if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+
                    call med_io_write(hist_file, iam, is_local%wrap%FBimp(n,n), &
                        nx=nx, ny=ny, nt=1, whead=whead, wdata=wdata, pre=trim(compname(n))//'Imp', rc=rc)
                    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
                 endif
                 if (ESMF_FieldBundleIsCreated(is_local%wrap%FBexp(n),rc=rc)) then
-                   call med_infodata_GetData(med_infodata, ncomp=n, nx=nx, ny=ny)
+                   call med_infodata_GetData(med_infodata, ncomp=n, nx=nx, ny=ny, rc=rc)
+                   if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+
                    call med_io_write(hist_file, iam, is_local%wrap%FBexp(n), &
                        nx=nx, ny=ny, nt=1, whead=whead, wdata=wdata, pre=trim(compname(n))//'Exp', rc=rc)
                    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return

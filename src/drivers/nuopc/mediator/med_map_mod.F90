@@ -76,33 +76,34 @@ contains
     use shr_nuopc_methods_mod , only : shr_nuopc_methods_ChkErr
     use med_internalstate_mod , only : InternalState
     use perf_mod              , only : t_startf, t_stopf
+
     ! input/output variables
     type(ESMF_GridComp)  :: gcomp
     integer, intent(in)  :: llogunit
     integer, intent(out) :: rc
 
     ! local variables
-    type(InternalState)              :: is_local
-    type(ESMF_VM)                    :: vm
-    type(ESMF_Field)                 :: fldsrc
-    type(ESMF_Field)                 :: flddst
-    integer                          :: localPet
-    integer                          :: n,n1,n2,m,nf,nflds,ncomp
-    integer                          :: SrcMaskValue
-    integer                          :: DstMaskValue
-    character(len=128)               :: value
-    character(len=128)               :: rhname
-    character(len=128)               :: rhname_file
+    type(InternalState)     :: is_local
+    type(ESMF_VM)           :: vm
+    type(ESMF_Field)        :: fldsrc
+    type(ESMF_Field)        :: flddst
+    integer                 :: localPet
+    integer                 :: n,n1,n2,m,nf,nflds,ncomp
+    integer                 :: SrcMaskValue
+    integer                 :: DstMaskValue
+    character(len=128)      :: value
+    character(len=128)      :: rhname
+    character(len=128)      :: rhname_file
     character(len=CS)       :: mapname
     character(len=CX)       :: mapfile
     character(len=CS)       :: string
-    integer                          :: mapindex
-    logical                          :: rhprint_flag = .false.
-    real(R8)     , pointer :: factorList(:)
+    integer                 :: mapindex
+    logical                 :: rhprint_flag = .false.
+    real(R8)      , pointer :: factorList(:)
     character(CL) , pointer :: fldnames(:)
+    integer                 :: dbrc
     type(ESMF_PoleMethod_Flag), parameter :: polemethod=ESMF_POLEMETHOD_ALLAVG
     character(len=*), parameter :: subname=' (module_med_map: RouteHandles_init) '
-    integer                       :: dbrc
     !-----------------------------------------------------------
     call t_startf('MED:'//subname)
 
@@ -151,7 +152,7 @@ contains
                 call shr_nuopc_methods_FB_getFieldN(is_local%wrap%FBImp(n1,n2), 1, flddst, rc)
                 if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-                ! Loop over fields
+                ! Loop over fields in source component (n1)
                 do nf = 1,size(fldListFr(n1)%flds)
 
                    ! Determine the mapping type for mapping field nf from n1 to n2
@@ -799,7 +800,7 @@ contains
   !================================================================================
 
   subroutine med_map_FB_Regrid_Norm_Frac(FBSrc, FBDst, fldnames, &
-       FBFrac, mapnorm, RouteHandle, string, rc)
+       FBNorm, fldnorm, RouteHandle, string, rc)
 
     ! ----------------------------------------------
     ! Map field bundles with appropriate fraction weighting
@@ -822,11 +823,11 @@ contains
     use perf_mod              , only: t_startf, t_stopf
 
     ! input/output variables
-    type(ESMF_FieldBundle) , intent(inout)        :: FBSrc
+    type(ESMF_FieldBundle) , intent(in)           :: FBSrc
     type(ESMF_FieldBundle) , intent(inout)        :: FBDst
     character(len=*)       , intent(in)           :: fldnames(:)
-    type(ESMF_FieldBundle) , intent(in)           :: FBFrac
-    character(len=*)       , intent(in)           :: mapnorm
+    type(ESMF_FieldBundle) , intent(in)           :: FBNorm
+    character(len=*)       , intent(in)           :: fldnorm
     type(ESMF_RouteHandle) , intent(inout)        :: RouteHandle
     character(len=*)       , intent(in), optional :: string
     integer                , intent(out)          :: rc
@@ -901,10 +902,10 @@ contains
        ! create a temporary field bundle that will contain normalization on the source grid
        if (.not. ESMF_FieldBundleIsCreated(FBNormSrc)) then
           call shr_nuopc_methods_FB_init(FBout=FBNormSrc, flds_scalar_name=flds_scalar_name, &
-               FBgeom=FBSrc, fieldNameList=(/trim(mapnorm)/), name='normsrc', rc=rc)
+               FBgeom=FBSrc, fieldNameList=(/trim(fldnorm)/), name='normsrc', rc=rc)
           if (shr_nuopc_methods_chkerr(rc,__line__,u_file_u)) return
 
-          call shr_nuopc_methods_FB_GetFldPtr(FBNormSrc, trim(mapnorm), data_srcnorm, rc=rc)
+          call shr_nuopc_methods_FB_GetFldPtr(FBNormSrc, trim(fldnorm), data_srcnorm, rc=rc)
           if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
        endif
 
@@ -914,10 +915,10 @@ contains
        ! create a temporary field bundle that will contain normalization on the destination grid
        if (.not. ESMF_FieldBundleIsCreated(FBNormDst)) then
           call shr_nuopc_methods_FB_init(FBout=FBNormDst, flds_scalar_name=flds_scalar_name, &
-               FBgeom=FBDst, fieldNameList=(/trim(mapnorm)/), name='normdst', rc=rc)
+               FBgeom=FBDst, fieldNameList=(/trim(fldnorm)/), name='normdst', rc=rc)
           if (shr_nuopc_methods_chkerr(rc,__line__,u_file_u)) return
 
-          call shr_nuopc_methods_FB_GetFldPtr(FBFrac, trim(mapnorm), data_frac, rc=rc)
+          call shr_nuopc_methods_FB_GetFldPtr(FBNorm, trim(fldnorm), data_frac, rc=rc)
           if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
        endif
 
@@ -926,7 +927,7 @@ contains
 
        ! error checks
        if (size(data_srcnorm) /= size(data_frac)) then
-          call ESMF_LogWrite(trim(subname)//" fldname= "//trim(fldnames(n))//" mapnorm= "//trim(mapnorm), &
+          call ESMF_LogWrite(trim(subname)//" fldname= "//trim(fldnames(n))//" fldnorm= "//trim(fldnorm), &
                ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u, rc=dbrc)
           write(csize1,'(i8)') size(data_srcnorm)
           write(csize2,'(i8)') size(data_frac)
@@ -961,11 +962,11 @@ contains
           if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
        end if
 
-       call shr_nuopc_methods_FB_FieldRegrid(FBNormSrc, mapnorm, FBNormDst, mapnorm, RouteHandle, rc)
+       call shr_nuopc_methods_FB_FieldRegrid(FBNormSrc, fldnorm, FBNormDst, fldnorm, RouteHandle, rc)
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
        ! multiply interpolated field (FBDst) by reciprocal of fraction on destination grid (FBNormDst)
-       call shr_nuopc_methods_FB_GetFldPtr(FBNormDst, trim(mapnorm), data_dstnorm, rc=rc)
+       call shr_nuopc_methods_FB_GetFldPtr(FBNormDst, trim(fldnorm), data_dstnorm, rc=rc)
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
        call shr_nuopc_methods_FB_GetFldPtr(FBDst, trim(fldnames(n)), data_dst, rc=rc)

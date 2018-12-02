@@ -150,10 +150,10 @@ contains
        allocate(l2x_gx(num_inst_lnd))
        allocate(l2gacc_lx(num_inst_lnd))
        do eli = 1,num_inst_lnd
-          call mct_aVect_init(l2x_gx(eli), rList=seq_flds_x2g_fields, lsize=lsize_g)
+          call mct_aVect_init(l2x_gx(eli), rList=seq_flds_x2g_fields, lsize=lsize_g)  ! no elevation classes
           call mct_aVect_zero(l2x_gx(eli))
 
-          call mct_aVect_init(l2gacc_lx(eli), rList=seq_flds_l2x_fields_to_glc, lsize=lsize_l)
+          call mct_aVect_init(l2gacc_lx(eli), rList=seq_flds_l2x_fields_to_glc, lsize=lsize_l) ! has elevation classes
           call mct_aVect_zero(l2gacc_lx(eli))
        enddo
        l2gacc_lx_cnt = 0
