@@ -40,17 +40,13 @@ module med_phases_prep_glc_mod
   ! - fields sent from lnd->med to glc    ARE     IN multiple elevation classes
   ! - fields sent from med->glc from land ARE NOT IN multiple elevation classes
   ! Need to keep track of the lnd->med fields destined for glc in the
-  ! FBLndAccum field(:) bundles. 
-  ! The size of the FBLndAccum(:) field bundle array will be the same size as 
-  ! the number of fields in is_local%wrap%FBExp(glc)
-  ! For each field bundle in FBLandAccum(:), the number of fields in that field bundle
-  ! will equal the number of elevation classes coming from the land
+  ! FBLndAccum field bundle. 
 
-  type(ESMF_FieldBundle), allocatable :: FBLndAccum(:)     ! Accumulator for various components import
-  integer               , allocatable :: FBLndAccumCnt(:)  ! Accumulator counter for each FBLndAccum
-  character(len=CS)     , allocatable :: fieldNameList(:)  ! Field names without elevation class suffix for each field bundle
-  integer                             :: fieldCount        ! Size of fieldNameList
-  integer                             :: nEC               ! Number of elevation classes 
+  type(ESMF_FieldBundle)         :: FBLndAccum              ! Accumulator for various components import
+  integer                        :: FBLndAccumCnt           ! Accumulator counter for each FBLndAccum
+  character(len=CS), allocatable :: fieldNameList_to_glc(:) ! Field names without elevation class suffix from glc
+  integer                        :: fieldCount_to_glc       ! Size of fieldNameList_to_glc
+  integer                        :: nEC                     ! Number of elevation classes 
 
   ! Whether to renormalize the SMB for conservation.
   ! Should be set to true for 2-way coupled runs with evolving ice sheets.
@@ -78,7 +74,6 @@ contains
     use ESMF              , only : ESMF_GridComp
     use ESMF              , only : ESMF_LogWrite, ESMF_LOGMSG_INFO, ESMF_SUCCESS
     use ESMF              , only : ESMF_FieldBundleGet
-    use glc_elevclass_mod , only : glc_elevclass_as_string
     use glc_elevclass_mod , only : glc_get_num_elevation_classes
 
     ! input/output variables
@@ -87,14 +82,12 @@ contains
 
     ! local variables
     type(InternalState)            :: is_local
-    integer                        :: nfld
-    integer                        :: ec
+    character(len=CS), allocatable :: fieldNameList_fr_lnd(:) ! Field names with elevation class suffix from land
+    integer                        :: fieldCount_fr_lnd       ! Size of fieldNameList_fr_lnd
     logical                        :: glc_coupled_fluxes
     logical                        :: lnd_prognostic
     character(len=CS)              :: glc_renormalize_smb
     character(len=CS)              :: do_renormalize_smb
-    character(len=CS), allocatable :: accum_fields(:,:)
-    character(len=:) , allocatable :: elevclass_as_string
     integer                        :: dbrc
     character(len=*) , parameter   :: subname='(init_lnd2glc_accum)'
     !---------------------------------------
@@ -115,46 +108,39 @@ contains
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     !---------------------------------------
-    ! -- Determine FBlndAccum(:) and FBLndAccumCnt(:)
+    ! Determine module variables
     !---------------------------------------
 
     if (mastertask) then
        write(logunit,*) subname,' initializing accumulated FBs for '//trim(compname(complnd))
     end if
 
-    ! TODO: make sure cpl_scalar is not used below
-
-    call ESMF_FieldBundleGet(is_local%wrap%FBExp(compglc), fieldCount=fieldCount, rc=rc)
-    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-    allocate(fieldNameList(fieldCount))
-    call ESMF_FieldBundleGet(is_local%wrap%FBExp(compglc), fieldNameList=fieldNamelist, rc=rc)
-    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
     ! Determine number of elevation classes
     nEC = glc_get_num_elevation_classes()
 
-    allocate(accum_fields(nEC, fieldCount))
-    do nfld = 1, fieldCount 
-       do ec = 1, nEC
-          elevclass_as_string = glc_elevclass_as_string(ec)
-          accum_fields(ec,nfld) = trim(fieldnameList(nfld)) // trim(elevclass_as_string)
-       end do
-    end do
+    ! Determine fields to glc
+    call ESMF_FieldBundleGet(is_local%wrap%FBExp(compglc), fieldCount=fieldCount_to_glc, rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    allocate(fieldNameList_to_glc(fieldCount_to_glc))
+    call ESMF_FieldBundleGet(is_local%wrap%FBExp(compglc), fieldNameList=fieldNamelist_to_glc, rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    allocate(FBLndAccum(fieldCount))
-    allocate(FBLndAccumCnt(fieldCount))
-    do nfld = 1,fieldCount
-       call shr_nuopc_methods_FB_init(FBLndAccum(nfld), flds_scalar_name, &
-            STgeom=is_local%wrap%NStateImp(complnd), fieldNameList=accum_fields(:,nfld), name='FBLndAccum', rc=rc)
-       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    ! Initialize FBLndAccum and FBLndAccumCnt
+    call ESMF_FieldBundleGet(is_local%wrap%FBImp(complnd,complnd), fieldCount=fieldCount_fr_lnd, rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    allocate(fieldNameList_fr_lnd(fieldCount_fr_lnd))
+    call ESMF_FieldBundleGet(is_local%wrap%FBImp(complnd,complnd), fieldNameList=fieldNamelist_fr_lnd, rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    deallocate(fieldNameList_fr_lnd)
 
-       call shr_nuopc_methods_FB_reset(FBLndAccum(nfld), value=czero, rc=rc)
-       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_nuopc_methods_FB_init(FBLndAccum, flds_scalar_name, &
+         STgeom=is_local%wrap%NStateImp(complnd), fieldNameList=fieldNameList_fr_lnd, name='FBLndAccum', rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-       FBLndAccumCnt(nfld) = 0
-    end do
+    call shr_nuopc_methods_FB_reset(FBLndAccum, value=czero, rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    deallocate(accum_fields)
+    FBLndAccumCnt = 0
 
     !---------------------------------------
     ! Determine if will do smb renormalization
@@ -249,14 +235,10 @@ contains
     !---------------------------------------
 
     call t_startf('MED:'//subname)
-<<<<<<< HEAD
-    call ESMF_LogWrite(trim(subname)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
-=======
 
     if (dbug_flag > 5) then
        call ESMF_LogWrite(trim(subname)//": called", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
->>>>>>> changes to get TG compsets at least running - validation must still be done
     rc = ESMF_SUCCESS
 
     !---------------------------------------
@@ -271,7 +253,7 @@ contains
     ! Initialize module field bundles if necessary
     !---------------------------------------
 
-    if (.not. allocated(FBLndAccum)) then
+    if (.not. ESMF_FieldBundleIsCreated(FBLndAccum)) then
        call med_phases_prep_glc_accum_init(gcomp, rc=rc)
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
     end if
@@ -291,15 +273,6 @@ contains
           call ESMF_LogWrite(trim(subname)//": only scalar data is present in FBexp(compglc), returning", &
                ESMF_LOGMSG_INFO, rc=dbrc)
        endif
-<<<<<<< HEAD
-    else
-
-       !---------------------------------------
-       !--- Get the current time from the clock
-       !---------------------------------------
-
-       call ESMF_GridCompGet(gcomp, clock=clock)
-=======
        RETURN
     end if
 
@@ -307,16 +280,14 @@ contains
     ! accumulator land input to glc component (on land grid)
     !---------------------------------------
 
-    do n = 1,fieldCount
-       call shr_nuopc_methods_FB_accum(FBLndAccum(n), is_local%wrap%FBImp(complnd,complnd), rc=rc)
-       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_nuopc_methods_FB_accum(FBLndAccum, is_local%wrap%FBImp(complnd,complnd), rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-       call shr_nuopc_methods_FB_diagnose(FBLndAccum(n), string=trim(subname)//&
-            ' FBLndAccum for field ' // trim(fieldNameList(n)), rc=rc)
-       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_nuopc_methods_FB_diagnose(FBLndAccum, string=trim(subname)// ' FBLndAccum ',  rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-       FBLndAccumCnt(n) = FBLndAccumCnt(n) + 1
-    end do
+    FBLndAccumCnt = FBLndAccumCnt + 1
+    write(6,*)'DEBUG: FBLndAccumCnt = ',FBLndAccumCnt
 
     !---------------------------------------
     ! update local scalar data - set valid input flag to .false.
@@ -365,41 +336,36 @@ contains
     integer, intent(out) :: rc
 
     ! local variables
-    type(ESMF_FieldBundle) :: FBlnd_topo_l
+    type(InternalState)    :: is_local
     type(ESMF_FieldBundle) :: FBlnd_topo_g
-    type(ESMF_FieldBundle) :: FBlnd_l
     type(ESMF_FieldBundle) :: FBlnd_g
-    real(r8), pointer      :: dataptr_l_in(:)    ! pointer to data coming from FBImp(complnd,complnd) for a given elevation class
-    real(r8), pointer      :: dataptr_l(:)       ! temporary data pointer for one elevation class
-    real(r8), pointer      :: dataptr_g(:)       ! temporary data pointer for one elevation class
-    real(r8), pointer      :: topolnd_l(:)       ! temporary data pointer
-    real    , pointer      :: topolnd_g_EC(:,:)  ! topo in elevation classes
-    real(r8), pointer      :: topoglc_g(:)       ! ice topographic height on the glc grid extracted from glc import
-    real(r8), pointer      :: data_g_bareland(:) 
-    real    , pointer      :: data_g_EC(:,:)     ! remapped field in each glc cell, in each EC
-    real(r8), pointer      :: data_g_ice_covered(:) ! data for ice-covered regions on the GLC grid
+    real(r8), pointer      :: dataptr_g(:)          ! temporary data pointer for one elevation class
+    real    , pointer      :: topolnd_g_EC(:,:)     ! topo in elevation classes
+    real(r8), pointer      :: topoglc_g(:)          ! ice topographic height on the glc grid extracted from glc import
+    real(r8), pointer      :: data_bareland_g(:)    ! data on glc bare land 
+    real(r8), pointer      :: data_ice_covered_g(:) ! data for ice-covered regions on the GLC grid
+    real    , pointer      :: data_EC_g(:,:)        ! remapped field in each glc cell, in each EC
     type(ESMF_Field)       :: lfield
     type(ESMF_Mesh)        :: lmesh
     type(ESMF_Clock)       :: clock
     type(ESMF_Time)        :: time
     character(len=64)      :: timestr
-    type(InternalState)    :: is_local
     integer                :: nfld 
     integer                :: ec
     integer                :: i,j,n,g,ncnt
     integer                :: lsize_g
     type(ESMF_Array)       :: elemAreaArray_g
     type(ESMF_Array)       :: elemAreaArray_l
-    real(r8), pointer      :: aream_g(:)         ! cell areas on glc grid, for mapping
-    real(r8), pointer      :: aream_l(:)         ! cell areas on glc grid, for mapping
-    real(r8), pointer      :: area_g(:)          ! cell areas on glc grid, according to glc model
-    real(r8), pointer      :: glc_ice_covered(:) ! if points on the glc grid is ice-covered (1) or ice-free (0)
-    integer , pointer      :: glc_elevclass(:)   ! elevation classes glc grid
-    real(r8), pointer      :: topoptr_g(:)       ! mapped topo from land for a given elevation class
-    real(r8), pointer      :: dataexp_g(:)       ! pointer into 
+    real(r8), pointer      :: aream_g(:)            ! cell areas on glc grid, for mapping
+    real(r8), pointer      :: aream_l(:)            ! cell areas on glc grid, for mapping
+    real(r8), pointer      :: area_g(:)             ! cell areas on glc grid, according to glc model
+    real(r8), pointer      :: glc_ice_covered(:)    ! if points on the glc grid is ice-covered (1) or ice-free (0)
+    integer , pointer      :: glc_elevclass(:)      ! elevation classes glc grid
+    real(r8), pointer      :: topoptr_g(:)          ! mapped topo from land for a given elevation class
+    real(r8), pointer      :: dataexp_g(:)          ! pointer into 
     integer                :: dbrc
-    real(r8)               :: elev_l, elev_u     ! lower and upper elevations in interpolation range
-    real(r8)               :: d_elev             ! elev_u - elev_l
+    real(r8)               :: elev_l, elev_u        ! lower and upper elevations in interpolation range
+    real(r8)               :: d_elev                ! elev_u - elev_l
     character(len=CS), allocatable :: fieldname_EC(:)
     character(len=CS), allocatable :: toponame_EC(:)
     character(len=:) , allocatable :: elevclass_as_string
@@ -422,57 +388,6 @@ contains
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     !---------------------------------------
-    ! Initialize module field bundles if necessary
-    !---------------------------------------
-
-    if (.not. allocated(FBLndAccum)) then
-       call med_phases_prep_glc_accum_init(gcomp, rc=rc)
->>>>>>> changes to get TG compsets at least running - validation must still be done
-       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-<<<<<<< HEAD
-       call ESMF_ClockGet(clock,currtime=time,rc=rc)
-       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-       call ESMF_TimeGet(time,timestring=timestr)
-       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-       if (dbug_flag > 1) then
-          call ESMF_LogWrite(trim(subname)//": time = "//trim(timestr), ESMF_LOGMSG_INFO, rc=dbrc)
-       endif
-
-       if (mastertask) then
-          call ESMF_ClockPrint(clock, options="currTime", preString="-------->"//trim(subname)//" mediating for: ", rc=rc)
-          if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-       end if
-
-       !---------------------------------------
-       !--- mapping
-       !---------------------------------------
-
-       do n1 = 1,ncomps
-          if (is_local%wrap%med_coupling_active(n1,compglc)) then
-             call med_map_FB_Regrid_Norm( &
-                  fldListFr(n1)%flds, n1, compglc, &
-                  is_local%wrap%FBImp(n1,n1), &
-                  is_local%wrap%FBImp(n1,compglc), &
-                  is_local%wrap%FBFrac(n1), &
-                  is_local%wrap%FBNormOne(n1,compglc,:), &
-                  is_local%wrap%RH(n1,compglc,:), &
-                  string=trim(compname(n1))//'2'//trim(compname(compglc)), rc=rc)
-             if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-          endif
-       enddo
-
-       !---------------------------------------
-       !--- auto merges
-       !---------------------------------------
-
-       call med_merge_auto(trim(compname(compglc)), &
-            is_local%wrap%FBExp(compglc), is_local%wrap%FBFrac(compglc), &
-            is_local%wrap%FBImp(:,compglc), fldListTo(compglc), &
-            document=first_call, string='(merge_to_lnd)', mastertask=mastertask, rc=rc)
-=======
-    !---------------------------------------
     ! Count the number of fields outside of scalar data, if zero, then return
     !---------------------------------------
 
@@ -488,17 +403,24 @@ contains
     end if
 
     !---------------------------------------
+    ! Initialize module field bundles if necessary
+    !---------------------------------------
+
+    if (.not. ESMF_FieldBundleIsCreated(FBLndAccum)) then
+       call med_phases_prep_glc_accum_init(gcomp, rc=rc)
+       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    end if
+
+    !---------------------------------------
     ! Average import from land accumuled FB
     !---------------------------------------
 
-    do nfld = 1,fieldCount
-       call shr_nuopc_methods_FB_average(FBlndAccum(nfld), FBlndAccumCnt(nfld), rc=rc)
-       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_nuopc_methods_FB_average(FBlndAccum, FBlndAccumCnt, rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-       call shr_nuopc_methods_FB_diagnose(FBlndAccum(nfld), string=trim(subname) // &
-            ' FBlndAccum for after avg for field bundle '//trim(fieldNameList(nfld)), rc=rc)
-       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-    end do
+    call shr_nuopc_methods_FB_diagnose(FBlndAccum, string=trim(subname)//&
+         ' FBlndAccum for after avg for field bundle ', rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     ! ------------------------------------------------------------------------
     ! Determine elevation class of each glc point on glc grid (output is topoglc_g)
@@ -519,6 +441,8 @@ contains
     ! to the glc grid (in multiple elevation classes) (output is topolnd_g_EC)
     ! ------------------------------------------------------------------------
     
+    allocate(topolnd_g_EC (lsize_g, nEC))
+
     allocate(toponame_ec(0:nEC))
 
     do ec = 0,nEC
@@ -526,33 +450,18 @@ contains
        toponame_EC(ec)  = 'Sl_topo' // elevclass_as_string
     end do
 
-    ! initialize FB on lnd grid for the field coming from land (with elevation classes)
-    call shr_nuopc_methods_FB_init(FBlnd_topo_l, flds_scalar_name, &
-         FBgeom=is_local%wrap%FBImp(complnd,complnd), fieldNameList=toponame_EC, rc=rc)
-    if (shr_nuopc_methods_chkerr(rc,__line__,u_file_u)) return
-
     ! initialize FB on glc grid for the field coming from land (with elevation classes)
     call shr_nuopc_methods_FB_init(FBlnd_topo_g, flds_scalar_name, &
          FBgeom=is_local%wrap%FBImp(complnd,compglc), fieldNameList=toponame_EC, rc=rc)
     if (shr_nuopc_methods_chkerr(rc,__line__,u_file_u)) return
-
-    ! Set the data in FBlnd_topo to be just the topo fields coming over from the land import
-    do ec = 1,nEC
-       call shr_nuopc_methods_FB_getFldPtr(FBlnd_topo_l, toponame_EC(ec), dataptr_l, rc=rc)
-       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-       call shr_nuopc_methods_FB_getFldPtr(is_local%wrap%FBImp(complnd,complnd), toponame_EC(ec), dataptr_l_in, rc=rc)
-       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-       dataptr_l(:) = dataptr_l_in(:)
-    end do
-         
+        
     ! map from the land grid to the glc grid to obtain FBlnd_topo_g
-    call med_map_FB_Regrid_Norm(FBlnd_topo_l, FBlnd_topo_g, toponame_EC, &
+    call med_map_FB_Regrid_Norm(FBlndAccum, FBlnd_topo_g, toponame_EC, &
          is_local%wrap%FBFrac(complnd), 'lfrac', &
          is_local%wrap%RH(complnd,compglc,mapbilnr), &
          string='mapping normalized elevation class 0 (bare land) from lnd to to glc', rc=rc)
 
-    ! save the result in topolnd_g_EC(:)
-    allocate(topolnd_g_EC (lsize_g, nEC))
+    ! save the result in topolnd_g_EC(:) 
     do ec = 1, nEC
        call shr_nuopc_methods_FB_getFldPtr(FBlnd_topo_g, toponame_EC(ec), dataptr_g, rc=rc)
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -562,8 +471,6 @@ contains
     enddo
 
     ! Clean field bundles
-    call shr_nuopc_methods_FB_clean(FBlnd_topo_l, rc=rc)
-    if (shr_nuopc_methods_chkerr(rc,__line__,u_file_u)) return
     call shr_nuopc_methods_FB_clean(FBlnd_topo_g, rc=rc)
     if (shr_nuopc_methods_chkerr(rc,__line__,u_file_u)) return
 
@@ -573,71 +480,55 @@ contains
     ! loop over field in export field bundle to GLC
     ! ------------------------------------------------------------------------
 
+    allocate(data_EC_g (lsize_g, 1:nEC))
+    allocate(data_ice_covered_g (lsize_g))
     allocate(fieldname_EC(0:nEC))
 
-    do nfld = 1, fieldCount 
+    do nfld = 1, fieldCount_to_glc
 
        ! ------------------------------------------------------------------------
        ! Set a pointer to the data for the field that will be sent to glc (without elevation classes)
        ! ------------------------------------------------------------------------
 
-       call shr_nuopc_methods_FB_getFldPtr(is_local%wrap%FBExp(compglc), fieldNameList(nfld), dataexp_g, rc=rc)
+       call shr_nuopc_methods_FB_getFldPtr(is_local%wrap%FBExp(compglc), fieldNameList_to_glc(nfld), dataexp_g, rc=rc)
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
        ! ------------------------------------------------------------------------
-       ! Initialize temporary field bundles - and set data in FBlnd_l
+       ! Map elevation class 0 (bare land) from the land to glc grid and 
        ! ------------------------------------------------------------------------
-
+       
        do ec = 0, nEC
           elevclass_as_string = glc_elevclass_as_string(ec)
-          fieldname_EC(ec) = trim(fieldnameList(nfld)) // elevclass_as_string
+          fieldname_EC(ec) = trim(fieldnameList_to_glc(nfld)) // elevclass_as_string
        end do
 
-       ! Initialize FB on lnd grid for the field coming from land (with elevation classes)
-       call shr_nuopc_methods_FB_init(FBlnd_l, flds_scalar_name, &
-            FBgeom=is_local%wrap%FBImp(complnd,complnd), fieldNameList=fieldname_EC, rc=rc)
-       if (shr_nuopc_methods_chkerr(rc,__line__,u_file_u)) return
-       
        ! Initialize FB on glc grid for the field coming from land (with elevation classes)
        call shr_nuopc_methods_FB_init(FBlnd_g, flds_scalar_name, &
             FBgeom=is_local%wrap%FBImp(complnd,compglc), fieldNameList=fieldname_EC, rc=rc)
        if (shr_nuopc_methods_chkerr(rc,__line__,u_file_u)) return
 
-       ! Set the data in FBlnd_l to be the fields coming over from the land import
-       do ec = 0,nEC
-          call shr_nuopc_methods_FB_getFldPtr(is_local%wrap%FBImp(complnd,complnd), &
-               fieldname_EC(ec), dataptr_l_in, rc=rc)
-          if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-          call shr_nuopc_methods_FB_getFldPtr(FBlnd_l, fieldname_EC(ec), dataptr_l, rc=rc)
-          if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-          dataptr_l(:) = dataptr_l_in(:)
-       end do
-
-       ! ------------------------------------------------------------------------
-       ! Map elevation class 0 (bare land) from the land to glc grid and 
-       ! set the output data equal to the bare land value everywhere 
-       ! This will later get overwritten in places where we have ice
-       ! ------------------------------------------------------------------------
-       
        ! Map bare land from land to glc 
-       call med_map_FB_Regrid_Norm(FBlnd_l, FBlnd_g, (/fieldname_EC(0)/), &
+       call med_map_FB_Regrid_Norm(FBlndAccum, FBlnd_g, (/fieldname_EC(0)/), &
             is_local%wrap%FBFrac(complnd), 'lfrac', &
             is_local%wrap%RH(complnd,compglc,mapbilnr), &
             string='mapping normalized elevation class 0 (bare land) from lnd to to glc', rc=rc)
+      
+       ! ------------------------------------------------------------------------
+       ! Set the output data equal to the bare land value everywhere 
+       ! This will later get overwritten in places where we have ice
+       ! ------------------------------------------------------------------------
 
-       call shr_nuopc_methods_FB_getFldPtr(FBlnd_g, fieldname_EC(0), data_g_bareland, rc=rc)
-       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-       
        ! TODO(wjs, 2015-01-20) This implies that we pass data to CISM even in places that
        ! CISM says is ocean (so CISM will ignore the incoming value). This differs from the
        ! current glint implementation, which sets acab and artm to 0 over ocean (although
        ! notes that this could lead to a loss of conservation). Figure out how to handle
        ! this case.
        
-       allocate(data_g_EC (lsize_g, 0:nEC))
-       do ec = 0,nEC
-          data_g_EC(:,ec) = real(data_g_bareland(:))
+       call shr_nuopc_methods_FB_getFldPtr(FBlnd_g, fieldname_EC(0), data_bareland_g, rc=rc)
+       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+
+       do n = 1, lsize_g
+          dataexp_g(n) = real(data_bareland_g(n))
        end do
 
        ! ------------------------------------------------------------------------
@@ -648,9 +539,9 @@ contains
        ! Regrid the above fields (corresponding to the above fldnames) from the land to the glc grid
        ! using bilinear interpolation (are regridding the SMB field and the topo values for each EC
        ! from the land grid to the glc grid)
-       ! The fields in FBlnd_l and in FBlnd_g are in multiple elevation classes 
+       ! The fields in FBlnd_g are in multiple elevation classes 
        
-       call med_map_FB_Regrid_Norm(FBlnd_l, FBlnd_g, fieldname_EC(1:nEC), &
+       call med_map_FB_Regrid_Norm(FBlndAccum, FBlnd_g, fieldname_EC(1:nEC), &
             is_local%wrap%FBFrac(complnd), 'lfrac', &
             is_local%wrap%RH(complnd,compglc,mapbilnr), &
             string='mapping normalized elevation class 0 (bare land) from lnd to to glc', rc=rc)
@@ -659,26 +550,33 @@ contains
           call shr_nuopc_methods_FB_getFldPtr(FBlnd_g, fieldname_EC(ec), dataptr_g, rc=rc)
           if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
-          data_g_EC(:,ec) = real(dataptr_g)
+          do n = 1,lsize_g
+             data_EC_g(n,ec) = real(dataptr_g(n))
+          end do
        enddo
 
+       ! ------------------------------------------------------------------------
        ! Perform vertical interpolation of data onto ice sheet topography
        ! This maps all of the input elevation classes into an export to glc without elevation classes
+       ! ------------------------------------------------------------------------
 
-       allocate(data_g_ice_covered(lsize_g))
-       data_g_ice_covered(:) = 0._r8
+       data_ice_covered_g(:) = 0._r8
        do n = 1, lsize_g
 
           ! For each ice sheet point, find bounding EC values...
+
           if (topoglc_g(n) < topolnd_g_EC(n,1)) then
+
              ! lower than lowest mean EC elevation value
-             data_g_ice_covered(n) = data_g_EC(n,1)
+             data_ice_covered_g(n) = data_EC_g(n,1)
 
           else if (topoglc_g(n) >= topolnd_g_EC(n,nEC)) then
+
              ! higher than highest mean EC elevation value
-             data_g_ice_covered(n) = data_g_EC(n,nEC)
+             data_ice_covered_g(n) = data_EC_g(n,nEC)
 
           else
+
              ! do linear interpolation of data in the vertical
              do ec = 2, nEC
                 if (topoglc_g(n) < topolnd_g_EC(n, ec)) then
@@ -693,12 +591,12 @@ contains
                       write(logunit,*) 'n, ec, elev_l, elev_u = ', n, ec, elev_l, elev_u
                       write(logunit,*) 'Simply using mean of the two elevation classes,'
                       write(logunit,*) 'rather than the weighted mean.'
-                      data_g_ice_covered(n) = data_g_EC(n,ec-1) * 0.5_r8 &
-                                            + data_g_EC(n,ec)   * 0.5_r8
+                      data_ice_covered_g(n) = data_EC_g(n,ec-1) * 0.5_r8 &
+                                            + data_EC_g(n,ec)   * 0.5_r8
                    else
 
-                      data_g_ice_covered(n) =  data_g_EC(n,ec-1) * (elev_u - topoglc_g(n)) / d_elev  &
-                                             + data_g_EC(n,ec)   * (topoglc_g(n) - elev_l) / d_elev
+                      data_ice_covered_g(n) =  data_EC_g(n,ec-1) * (elev_u - topoglc_g(n)) / d_elev  &
+                                             + data_EC_g(n,ec)   * (topoglc_g(n) - elev_l) / d_elev
                    end if
 
                    exit
@@ -707,11 +605,8 @@ contains
           end if  ! topoglc_g(n)
        end do  ! lsize_g
 
-       deallocate(data_g_EC)
 
        ! Clean field bundles
-       call shr_nuopc_methods_FB_clean(FBlnd_l, rc=rc)
-       if (shr_nuopc_methods_chkerr(rc,__line__,u_file_u)) return
        call shr_nuopc_methods_FB_clean(FBlnd_g, rc=rc)
        if (shr_nuopc_methods_chkerr(rc,__line__,u_file_u)) return
 
@@ -721,16 +616,14 @@ contains
        ! ------------------------------------------------------------------------
 
        where (glc_elevclass /= 0)
-          dataexp_g = data_g_ice_covered
+          dataexp_g = data_ice_covered_g
        end where
-
-       deallocate(data_g_ice_covered)
 
        ! ------------------------------------------------------------------------
        ! If the field is the flux field from the land giving the surface mass balance to glc
        ! ------------------------------------------------------------------------
 
-       if (trim(fieldNameList(nfld)) == trim(qice_fieldname)) then
+       if (trim(fieldNameList_to_glc(nfld)) == trim(qice_fieldname)) then
 
           ! Make a preemptive adjustment to qice_g to account for area differences between CISM and the coupler.
           ! - When sending back fluxes to glc, need to multiple the fluxes by by aream_g/area_g for 
@@ -792,6 +685,8 @@ contains
 
     end do  ! end of loop over fields
 
+    deallocate(data_EC_g)
+    deallocate(data_ice_covered_g)
     deallocate(fieldname_EC)
     deallocate(topolnd_g_EC)
 
@@ -801,34 +696,9 @@ contains
 
     if (dbug_flag > 1) then
        call shr_nuopc_methods_FB_diagnose(is_local%wrap%FBExp(compglc), string=trim(subname)//' FBexp(compglc) ', rc=rc)
->>>>>>> changes to get TG compsets at least running - validation must still be done
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-<<<<<<< HEAD
-       if (dbug_flag > 1) then
-          call shr_nuopc_methods_FB_diagnose(is_local%wrap%FBExp(compglc), string=trim(subname)//' FBexp(compglc) ', rc=rc)
-          if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-       endif
-
-       !---------------------------------------
-       !--- custom calculations
-       !---------------------------------------
-
-       !---------------------------------------
-       !--- update local scalar data
-       !---------------------------------------
-
-       !is_local%wrap%scalar_data(1) =
-
-       !---------------------------------------
-       !--- clean up
-       !---------------------------------------
-
-       first_call = .false.
     endif
-    call ESMF_LogWrite(trim(subname)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
-    call t_stopf('MED:'//subname)
-=======
+
     !---------------------------------------
     ! update local scalar data - set valid input flag to .true.
     !---------------------------------------
@@ -853,6 +723,15 @@ contains
        call ESMF_LogWrite(trim(subname)//": done", ESMF_LOGMSG_INFO, rc=dbrc)
     endif
     call t_stopf('MED:'//subname)
+
+    !---------------------------------------
+    !--- zero accumulator
+    !---------------------------------------
+
+    FBLndAccumCnt = 0
+
+    call shr_nuopc_methods_FB_reset(FBLndAccum, value=czero, rc=rc)
+    if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
   end subroutine med_phases_prep_glc_avg
 
@@ -900,7 +779,6 @@ contains
     type(ESMF_Array)       :: elemAreaArray_l
     type(ESMF_Array)       :: elemAreaArray_g
     logical                :: isPresent 
-    integer                :: nfld
     real(r8), pointer      :: aream_l(:)      ! cell areas on land grid, for mapping
     real(r8), pointer      :: aream_g(:)      ! cell areas on glc grid, for mapping
     integer                :: lsize_l         ! number of points on land grid
@@ -1059,15 +937,13 @@ contains
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
        frac_l(:,ec) = tmp_field_l(:)
 
-       do nfld = 1,fieldCount
-          call ESMF_FieldBundleGet(FBLndAccum(nfld), qice_fields_ec(ec), isPresent=isPresent, rc=rc)
+       call ESMF_FieldBundleGet(FBLndAccum, qice_fields_ec(ec), isPresent=isPresent, rc=rc)
+       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+       if (isPresent) then
+          call shr_nuopc_methods_FB_getFldPtr(FBLndAccum, qice_fields_ec(ec), tmp_field_l, rc=rc)
           if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-          if (isPresent) then
-             call shr_nuopc_methods_FB_getFldPtr(FBLndAccum(nfld), qice_fields_ec(ec), tmp_field_l, rc=rc)
-             if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-             qice_l(:,ec) = tmp_field_l(:)
-          end if
-       end do
+          qice_l(:,ec) = tmp_field_l(:)
+       end if
     enddo
 
     ! Create local arrays over elevation class for qice_l and frac_l
@@ -1142,7 +1018,6 @@ contains
     else
        accum_renorm_factor = 0.0_r8
     endif
->>>>>>> changes to get TG compsets at least running - validation must still be done
 
     if (global_ablat_on_glc_grid < 0.0_r8) then  ! negative by definition
        ablat_renorm_factor = global_ablat_on_land_grid / global_ablat_on_glc_grid

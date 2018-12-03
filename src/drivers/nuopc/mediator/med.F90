@@ -1432,10 +1432,6 @@ contains
     use med_map_mod             , only : med_map_MapNorm_init, med_map_RouteHandles_init
     use med_io_mod              , only : med_io_init
 
-    !DEBUG
-    use ESMF, only : ESMF_FieldBundleGet
-    !DEBUG
-
     ! input/output variables
     type(ESMF_GridComp)  :: gcomp
     integer, intent(out) :: rc
@@ -1616,12 +1612,6 @@ contains
             if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
             call shr_nuopc_methods_FB_reset(is_local%wrap%FBExpAccum(n1), value=czero, rc=rc)
             if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-
-            !DEBUG
-            call ESMF_FieldBundleGet(is_local%wrap%FBExp(n1), fieldCount=cntn1, rc=rc)
-            if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-            write(6,*)'DEBUG: FBExp for ',n1,'has fieldcount = ',cntn1
-            !DEBUG
 
             is_local%wrap%FBExpAccumCnt(n1) = 0
 
