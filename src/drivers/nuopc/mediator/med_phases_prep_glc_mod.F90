@@ -40,13 +40,13 @@ module med_phases_prep_glc_mod
   ! - fields sent from lnd->med to glc    ARE     IN multiple elevation classes
   ! - fields sent from med->glc from land ARE NOT IN multiple elevation classes
   ! Need to keep track of the lnd->med fields destined for glc in the
-  ! FBLndAccum field bundle. 
+  ! FBLndAccum field bundle.
 
   type(ESMF_FieldBundle)         :: FBLndAccum              ! Accumulator for various components import
   integer                        :: FBLndAccumCnt           ! Accumulator counter for each FBLndAccum
   character(len=CS), allocatable :: fieldNameList_to_glc(:) ! Field names without elevation class suffix from glc
   integer                        :: fieldCount_to_glc       ! Size of fieldNameList_to_glc
-  integer                        :: nEC                     ! Number of elevation classes 
+  integer                        :: nEC                     ! Number of elevation classes
 
   ! Whether to renormalize the SMB for conservation.
   ! Should be set to true for 2-way coupled runs with evolving ice sheets.
@@ -65,7 +65,7 @@ module med_phases_prep_glc_mod
 !-----------------------------------------------------------------------------
 contains
 !-----------------------------------------------------------------------------
-  
+
   subroutine med_phases_prep_glc_accum_init(gcomp, rc)
 
     ! Initialize module field bundles needed for accumulation
@@ -147,7 +147,7 @@ contains
     !---------------------------------------
 
     ! For now hardwire these
-    ! TODO (mvertens, 2018-11-25) : put in the correct logic for the following 
+    ! TODO (mvertens, 2018-11-25) : put in the correct logic for the following
     ! for now simply set them to false
 
     glc_renormalize_smb = 'off'
@@ -161,7 +161,7 @@ contains
 
   function prep_glc_do_renormalize_smb(glc_renormalize_smb, glc_coupled_fluxes, lnd_prognostic) &
        result(do_renormalize_smb)
-    
+
     ! Returns a logical saying whether we should do the smb renormalization
 
     ! function return
@@ -215,7 +215,7 @@ contains
     ! Mapping from the land to the glc grid is then done with the time averaged fields
 
     ! uses
-    use ESMF             , only : ESMF_GridComp, ESMF_GridCompGet 
+    use ESMF             , only : ESMF_GridComp, ESMF_GridCompGet
     use ESMF             , only : ESMF_LogWrite, ESMF_LOGMSG_INFO, ESMF_SUCCESS
     use ESMF             , only : ESMF_Clock, ESMF_ClockGet, ESMF_Time, ESMF_TimeGet, ESMF_ClockPrint
     use ESMF             , only : ESMF_FieldBundleGet, ESMF_FieldBundleIsCreated
@@ -326,7 +326,7 @@ contains
     use ESMF                  , only : ESMF_GridComp, ESMF_Clock, ESMF_Time, ESMF_Array, ESMF_ArrayGet
     use ESMF                  , only : ESMF_LogWrite, ESMF_LOGMSG_INFO, ESMF_SUCCESS
     use ESMF                  , only : ESMF_GridCompGet, ESMF_ClockGet, ESMF_TimeGet, ESMF_ClockPrint
-    use ESMF                  , only : ESMF_FieldBundleGet, ESMF_FieldBundle, ESMF_FieldBundleIsCreated 
+    use ESMF                  , only : ESMF_FieldBundleGet, ESMF_FieldBundle, ESMF_FieldBundleIsCreated
     use ESMF                  , only : ESMF_Field, ESMF_FieldGet, ESMF_Mesh, ESMF_MeshGet
     use med_map_mod           , only : med_map_FB_Regrid_Norm
     use glc_elevclass_mod     , only : glc_elevclass_as_string
@@ -342,7 +342,7 @@ contains
     real(r8), pointer      :: dataptr_g(:)          ! temporary data pointer for one elevation class
     real    , pointer      :: topolnd_g_EC(:,:)     ! topo in elevation classes
     real(r8), pointer      :: topoglc_g(:)          ! ice topographic height on the glc grid extracted from glc import
-    real(r8), pointer      :: data_bareland_g(:)    ! data on glc bare land 
+    real(r8), pointer      :: data_bareland_g(:)    ! data on glc bare land
     real(r8), pointer      :: data_ice_covered_g(:) ! data for ice-covered regions on the GLC grid
     real    , pointer      :: data_EC_g(:,:)        ! remapped field in each glc cell, in each EC
     type(ESMF_Field)       :: lfield
@@ -350,7 +350,7 @@ contains
     type(ESMF_Clock)       :: clock
     type(ESMF_Time)        :: time
     character(len=64)      :: timestr
-    integer                :: nfld 
+    integer                :: nfld
     integer                :: ec
     integer                :: i,j,n,g,ncnt
     integer                :: lsize_g
@@ -362,7 +362,7 @@ contains
     real(r8), pointer      :: glc_ice_covered(:)    ! if points on the glc grid is ice-covered (1) or ice-free (0)
     integer , pointer      :: glc_elevclass(:)      ! elevation classes glc grid
     real(r8), pointer      :: topoptr_g(:)          ! mapped topo from land for a given elevation class
-    real(r8), pointer      :: dataexp_g(:)          ! pointer into 
+    real(r8), pointer      :: dataexp_g(:)          ! pointer into
     integer                :: dbrc
     real(r8)               :: elev_l, elev_u        ! lower and upper elevations in interpolation range
     real(r8)               :: d_elev                ! elev_u - elev_l
@@ -440,7 +440,7 @@ contains
     ! Map the topo field from the land grid (in multiple elevation classes)
     ! to the glc grid (in multiple elevation classes) (output is topolnd_g_EC)
     ! ------------------------------------------------------------------------
-    
+
     allocate(topolnd_g_EC (lsize_g, nEC))
 
     allocate(toponame_ec(0:nEC))
@@ -454,14 +454,14 @@ contains
     call shr_nuopc_methods_FB_init(FBlnd_topo_g, flds_scalar_name, &
          FBgeom=is_local%wrap%FBImp(complnd,compglc), fieldNameList=toponame_EC, rc=rc)
     if (shr_nuopc_methods_chkerr(rc,__line__,u_file_u)) return
-        
+
     ! map from the land grid to the glc grid to obtain FBlnd_topo_g
     call med_map_FB_Regrid_Norm(FBlndAccum, FBlnd_topo_g, toponame_EC, &
          is_local%wrap%FBFrac(complnd), 'lfrac', &
          is_local%wrap%RH(complnd,compglc,mapbilnr), &
          string='mapping normalized elevation class 0 (bare land) from lnd to to glc', rc=rc)
 
-    ! save the result in topolnd_g_EC(:) 
+    ! save the result in topolnd_g_EC(:)
     do ec = 1, nEC
        call shr_nuopc_methods_FB_getFldPtr(FBlnd_topo_g, toponame_EC(ec), dataptr_g, rc=rc)
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -494,9 +494,9 @@ contains
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
        ! ------------------------------------------------------------------------
-       ! Map elevation class 0 (bare land) from the land to glc grid and 
+       ! Map elevation class 0 (bare land) from the land to glc grid and
        ! ------------------------------------------------------------------------
-       
+
        do ec = 0, nEC
           elevclass_as_string = glc_elevclass_as_string(ec)
           fieldname_EC(ec) = trim(fieldnameList_to_glc(nfld)) // elevclass_as_string
@@ -507,14 +507,14 @@ contains
             FBgeom=is_local%wrap%FBImp(complnd,compglc), fieldNameList=fieldname_EC, rc=rc)
        if (shr_nuopc_methods_chkerr(rc,__line__,u_file_u)) return
 
-       ! Map bare land from land to glc 
+       ! Map bare land from land to glc
        call med_map_FB_Regrid_Norm(FBlndAccum, FBlnd_g, (/fieldname_EC(0)/), &
             is_local%wrap%FBFrac(complnd), 'lfrac', &
             is_local%wrap%RH(complnd,compglc,mapbilnr), &
             string='mapping normalized elevation class 0 (bare land) from lnd to to glc', rc=rc)
-      
+
        ! ------------------------------------------------------------------------
-       ! Set the output data equal to the bare land value everywhere 
+       ! Set the output data equal to the bare land value everywhere
        ! This will later get overwritten in places where we have ice
        ! ------------------------------------------------------------------------
 
@@ -523,7 +523,7 @@ contains
        ! current glint implementation, which sets acab and artm to 0 over ocean (although
        ! notes that this could lead to a loss of conservation). Figure out how to handle
        ! this case.
-       
+
        call shr_nuopc_methods_FB_getFldPtr(FBlnd_g, fieldname_EC(0), data_bareland_g, rc=rc)
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
@@ -535,12 +535,12 @@ contains
        ! Map the SMB field from the land grid (in multiple elevation classes)
        ! to the glc grid (in multiple elevation classes)
        ! ------------------------------------------------------------------------
-       
+
        ! Regrid the above fields (corresponding to the above fldnames) from the land to the glc grid
        ! using bilinear interpolation (are regridding the SMB field and the topo values for each EC
        ! from the land grid to the glc grid)
-       ! The fields in FBlnd_g are in multiple elevation classes 
-       
+       ! The fields in FBlnd_g are in multiple elevation classes
+
        call med_map_FB_Regrid_Norm(FBlndAccum, FBlnd_g, fieldname_EC(1:nEC), &
             is_local%wrap%FBFrac(complnd), 'lfrac', &
             is_local%wrap%RH(complnd,compglc,mapbilnr), &
@@ -626,21 +626,21 @@ contains
        if (trim(fieldNameList_to_glc(nfld)) == trim(qice_fieldname)) then
 
           ! Make a preemptive adjustment to qice_g to account for area differences between CISM and the coupler.
-          ! - When sending back fluxes to glc, need to multiple the fluxes by by aream_g/area_g for 
-          !   conservation purposes.  Where CISM areas are larger (area_g > aream_g), the fluxes are reduced, 
+          ! - When sending back fluxes to glc, need to multiple the fluxes by by aream_g/area_g for
+          !   conservation purposes.  Where CISM areas are larger (area_g > aream_g), the fluxes are reduced,
           !   and where CISM areas are smaller, the fluxes are increased.
-          ! - As a result, an SMB of 1 m/yr in CLM would be converted to an SMB ranging from ~0.9 to 1.05 m/yr 
+          ! - As a result, an SMB of 1 m/yr in CLM would be converted to an SMB ranging from ~0.9 to 1.05 m/yr
           !   in CISM (with smaller values where CISM areas are larger, and larger values where CISM areas are smaller).
           ! - Here, to keep CISM values close to the CLM values in the corresponding locations,
           !   we anticipate the later correction and multiply qice_g by area_g/aream_g.
-          !   In the CISM cap, the multiplication by aream_g/area_g will bring qice back to the original values 
+          !   In the CISM cap, the multiplication by aream_g/area_g will bring qice back to the original values
           !   obtained from bilinear remapping.
           !
           ! Note that we are free to do this or any other adjustments we want to qice at this
           ! point in the remapping, because the conservation correction will ensure that we
           ! still conserve globally despite these adjustments (and smb_renormalize = .false.
           ! should only be used in cases where conservation doesn't matter anyway).
-          
+
           ! Determine aream_g
           call ESMF_FieldBundleGet(is_local%wrap%FBExp(compglc), qice_fieldname, field=lfield, rc=rc)
           if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -672,7 +672,7 @@ contains
           !    endif
           ! enddo
           ! deallocate(area_g)
-          
+
           ! Renormalizes surface mass balance (smb, here named dataexp_g) so that the global
           ! integral on the glc grid is equal to the global integral on the land grid.
 
@@ -756,9 +756,9 @@ contains
     !------------------
 
     ! uses
-    use ESMF                  , only : ESMF_GridComp, ESMF_GridCompGet 
+    use ESMF                  , only : ESMF_GridComp, ESMF_GridCompGet
     use ESMF                  , only : ESMF_FieldBundle, ESMF_FieldBundleGet, ESMF_Field, ESMF_FieldGet
-    use ESMF                  , only : ESMF_Mesh, ESMF_MeshGet, ESMF_Array, ESMF_ArrayGet 
+    use ESMF                  , only : ESMF_Mesh, ESMF_MeshGet, ESMF_Array, ESMF_ArrayGet
     use ESMF                  , only : ESMF_LogWrite, ESMF_LOGMSG_INFO, ESMF_SUCCESS
     use med_map_mod           , only : med_map_FB_Regrid_Norm
     use med_map_glc2lnd_mod   , only : med_map_glc2lnd_elevclass
@@ -778,7 +778,7 @@ contains
     type(ESMF_Field)       :: lfield
     type(ESMF_Array)       :: elemAreaArray_l
     type(ESMF_Array)       :: elemAreaArray_g
-    logical                :: isPresent 
+    logical                :: isPresent
     real(r8), pointer      :: aream_l(:)      ! cell areas on land grid, for mapping
     real(r8), pointer      :: aream_g(:)      ! cell areas on glc grid, for mapping
     integer                :: lsize_l         ! number of points on land grid
@@ -789,7 +789,7 @@ contains
     real(r8), pointer      :: Sg_icemask_g(:) ! icemask on glc grid
     real(r8), pointer      :: Sg_icemask_l(:) ! icemask on land grid
     real(r8), pointer      :: lfrac(:)        ! land fraction on land grid
-    integer                :: ec              ! loop index over elevation classes 
+    integer                :: ec              ! loop index over elevation classes
     integer                :: n
     integer                :: dbrc
 
@@ -884,7 +884,7 @@ contains
     if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
 
     !---------------------------------------
-    ! Map Sg_ice_covered from the glc grid (no elevation classes) to the land grid (with elevation classes) 
+    ! Map Sg_ice_covered from the glc grid (no elevation classes) to the land grid (with elevation classes)
     !---------------------------------------
 
     ! This gives the fields Sg_ice_covered00, Sg_ice_covered01, etc. on the land grid.

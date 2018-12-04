@@ -1,9 +1,8 @@
 module med_phases_prep_lnd_mod
 
   !-----------------------------------------------------------------------------
-  ! Mediator Phases
+  ! Mediator Phase - prepare lnd input
   !-----------------------------------------------------------------------------
-
 
   implicit none
   private
@@ -152,6 +151,5 @@ contains
     call t_stopf('MED:'//subname)
 
   end subroutine med_phases_prep_lnd
->>>>>>> first set of changes that get mosart working as a nuopc component
 
 end module med_phases_prep_lnd_mod
