@@ -340,27 +340,27 @@ contains
           call addmap(fldListFr(compatm)%flds, 'Sa_v'   , compocn, mappatch, 'one', atm2ocn_vmap)
 
           call addfld(fldListFr(compatm)%flds, 'Sa_z')
-          call addmap(fldListFr(compatm)%flds, 'Sa_z'   , compocn, mapconsf, 'one', atm2ocn_smap)
+          call addmap(fldListFr(compatm)%flds, 'Sa_z'   , compocn, mapbilnr, 'one', atm2ocn_smap)
 
           call addfld(fldListFr(compatm)%flds, 'Sa_tbot')
-          call addmap(fldListFr(compatm)%flds, 'Sa_tbot', compocn, mapconsf, 'one', atm2ocn_smap)
+          call addmap(fldListFr(compatm)%flds, 'Sa_tbot', compocn, mapbilnr, 'one', atm2ocn_smap)
 
           call addfld(fldListFr(compatm)%flds, 'Sa_pbot')
-          call addmap(fldListFr(compatm)%flds, 'Sa_pbot', compocn, mapconsf, 'one', atm2ocn_smap)
+          call addmap(fldListFr(compatm)%flds, 'Sa_pbot', compocn, mapbilnr, 'one', atm2ocn_smap)
 
           do n = 1,size(iso)
              call addfld(fldListFr(compatm)%flds, 'Sa_shum'//iso(n))
-             call addmap(fldListFr(compatm)%flds, 'Sa_shum'//iso(n), compocn, mapconsf, 'one', atm2ocn_smap)
+             call addmap(fldListFr(compatm)%flds, 'Sa_shum'//iso(n), compocn, mapbilnr, 'one', atm2ocn_smap)
           end do
 
           if (fldchk(is_local%wrap%FBImp(compatm,compatm), 'Sa_ptem', rc=rc)) then
              call addfld(fldListFr(compatm)%flds, 'Sa_ptem')
-             call addmap(fldListFr(compatm)%flds, 'Sa_ptem', compocn, mapconsf, 'one', atm2ocn_smap)
+             call addmap(fldListFr(compatm)%flds, 'Sa_ptem', compocn, mapbilnr, 'one', atm2ocn_smap)
           end if
 
           if (fldchk(is_local%wrap%FBImp(compatm,compatm), 'Sa_dens', rc=rc)) then
              call addfld(fldListFr(compatm)%flds, 'Sa_dens')
-             call addmap(fldListFr(compatm)%flds, 'Sa_dens', compocn, mapconsf, 'one', atm2ocn_smap)
+             call addmap(fldListFr(compatm)%flds, 'Sa_dens', compocn, mapbilnr, 'one', atm2ocn_smap)
           end if
        end if
     end if
@@ -1693,9 +1693,9 @@ contains
           if ( fldchk(is_local%wrap%FBexp(compice)         , trim(fldname), rc=rc) .and. &
                fldchk(is_local%wrap%FBImp(compatm,compatm ), trim(fldname), rc=rc)) then
              if (trim(fldname) == 'Sa_u' .or. trim(fldname) == 'Sa_v') then
-                call addmap(fldListFr(compatm)%flds, trim(fldname), compice, mapconsf, 'one', atm2ice_vmap)
+                call addmap(fldListFr(compatm)%flds, trim(fldname), compice, mappatch, 'one', atm2ice_vmap)
              else
-                call addmap(fldListFr(compatm)%flds, trim(fldname), compice, mapconsf, 'one', atm2ice_smap)
+                call addmap(fldListFr(compatm)%flds, trim(fldname), compice, mapbilnr, 'one', atm2ice_smap)
              end if
              call addmrg(fldListTo(compice)%flds, trim(fldname), &
                   mrg_from1=compatm, mrg_fld1=trim(fldname), mrg_type1='copy')
