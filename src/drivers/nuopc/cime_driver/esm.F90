@@ -962,6 +962,7 @@ contains
     character(len=32), allocatable :: attrList(:)
     integer                        :: dbrc
     character(len=*), parameter    :: subname = "(esm.F90:AddAttributes)"
+    logical                        :: lvalue = .false.
     !-------------------------------------------
 
     rc = ESMF_Success
@@ -1070,6 +1071,15 @@ contains
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
        call NUOPC_CompAttributeSet(gcomp, name="med_present", value=med_present, rc=rc)
        if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+
+       call NUOPC_CompAttributeGet(driver, name="mediator_read_restart", value=cvalue, rc=rc)
+       if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+      
+       read(cvalue,*) lvalue
+       if (lvalue) then
+          call NUOPC_CompAttributeSet(gcomp, name="read_restart", value='.true.', rc=rc)
+          if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+       end if
 
     endif
 
