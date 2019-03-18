@@ -615,6 +615,8 @@ class Case(object):
             env_file.add_elements_by_group(drv_comp, attributes=attlist)
 
         drv_config_file_model_specific = files.get_value("CONFIG_CPL_FILE_MODEL_SPECIFIC")
+        expect(os.path.isfile(drv_config_file_model_specific),
+               "No {} specific file found for driver {}".format(get_model(),driver))
         drv_comp_model_specific = Component(drv_config_file_model_specific, 'CPL')
 
         self._component_description["forcing"] = drv_comp_model_specific.get_forcing_description(self._compsetname)
@@ -1040,6 +1042,7 @@ class Case(object):
 
         # set up utility files in caseroot/Tools/
         toolfiles = [os.path.join(toolsdir, "check_lockedfiles"),
+                     os.path.join(toolsdir, "get_standard_makefile_args"),
                      os.path.join(toolsdir, "getTiming"),
                      os.path.join(toolsdir, "save_provenance"),
                      os.path.join(toolsdir,"Makefile"),
@@ -1325,7 +1328,7 @@ directory, NOT in this subdirectory."""
         Returns True if current settings require a threaded build/run.
         """
         force_threaded = self.get_value("FORCE_BUILD_SMP")
-        smp_present = bool(force_threaded) or self.thread_count > 1
+        smp_present = force_threaded or self.thread_count > 1
         return smp_present
 
     def _check_testlists(self, compset_alias, grid_name, files):
