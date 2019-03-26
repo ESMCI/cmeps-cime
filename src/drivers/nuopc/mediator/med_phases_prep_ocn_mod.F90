@@ -36,6 +36,7 @@ contains
     use med_internalstate_mod , only : InternalState
     use shr_nuopc_methods_mod , only : shr_nuopc_methods_ChkErr
     use shr_nuopc_methods_mod , only : shr_nuopc_methods_FB_getNumFlds
+    use shr_nuopc_methods_mod , only : shr_nuopc_methods_FB_diagnose
     use med_map_mod           , only : med_map_FB_Regrid_Norm
     use esmFlds               , only : fldListFr
     use esmFlds               , only : compocn, ncomps, compname
@@ -468,6 +469,7 @@ contains
           end do
 
           customwgt(:) = wgtm01(:) / const_lhvap
+          ! mean_evap_rate = mean_laten_heat_flux * (1-ice_fraction)/const_lhvap
           call med_merge_field(is_local%wrap%FBExp(compocn),      'Foxx_evap', &
                FBinA=is_local%wrap%FBMed_aoflux_o        , fnameA='Faox_evap', wgtA=ocnwgt1, &
                FBinB=is_local%wrap%FBImp(compatm,compocn), fnameB='Faxa_lat' , wgtB=customwgt, rc=rc)
@@ -490,10 +492,10 @@ contains
 
           ! If there is no ice on the ocn gridcell (ocnwgt1=0) - sum Faxa_lwdn and Faxa_lwup
           ! If there is ice on the ocn gridcell -  merge Faox_lwup and Faxa_lwdn and ignore Faxa_lwup
-          call med_merge_field(is_local%wrap%FBExp(compocn),      'Foxx_lwnet', &
-               FBinA=is_local%wrap%FBMed_aoflux_o        , fnameA='Faox_lwup ', wgtA=ocnwgt1, &
-               FBinB=is_local%wrap%FBImp(compatm,compocn), fnameB='Faxa_lwdn' , wgtB=ocnwgt1, &
-               FBinC=is_local%wrap%FBImp(compatm,compocn), fnameC='Faxa_lwup' , wgtc=wgtp01, rc=rc)
+          call med_merge_field(is_local%wrap%FBExp(compocn),      'Foxx_lwnet' , &
+               FBinA=is_local%wrap%FBMed_aoflux_o        , fnameA='Faox_lwup ' , wgtA=ocnwgt1, &
+               FBinB=is_local%wrap%FBImp(compatm,compocn), fnameB='Faxa_lwdn'  , wgtB=ocnwgt1, &
+               FBinC=is_local%wrap%FBImp(compatm,compocn), fnameC='Faxa_lwnet' , wgtc=wgtp01, rc=rc)
 
           deallocate(ocnwgt1)
           deallocate(icewgt1)

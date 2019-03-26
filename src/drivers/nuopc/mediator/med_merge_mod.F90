@@ -4,7 +4,7 @@ module med_merge_mod
   ! Performs merges from source field bundles to destination field bundle
   !-----------------------------------------------------------------------------
 
-  use med_constants_mod     , only : R8
+  use med_constants_mod     , only : R8, CL
   use med_constants_mod     , only : dbug_flag => med_constants_dbug_flag
   use med_constants_mod     , only : spval_init => med_constants_spval_init
   use med_constants_mod     , only : spval => med_constants_spval
@@ -551,6 +551,7 @@ contains
     integer                    :: lb1,ub1,lb2,ub2,i,j,n
     logical                    :: wgtfound, FBinfound
     integer                    :: dbrc
+    character(len=CL)          :: errorName
     character(len=*),parameter :: subname='(med_merge_field_2d)'
     ! ----------------------------------------------
 
@@ -589,20 +590,33 @@ contains
     ! check that each field passed in actually exists, if not DO NOT do any merge
     FBinfound = .true.
     if (present(FBinB)) then
-       if (.not. shr_nuopc_methods_FB_FldChk(FBinB, trim(fnameB), rc=rc)) FBinfound = .false.
+       if (.not. shr_nuopc_methods_FB_FldChk(FBinB, trim(fnameB), rc=rc)) then
+          errorname=fnameB
+          FBinfound = .false.
+       end if
     endif
     if (present(FBinC)) then
-       if (.not. shr_nuopc_methods_FB_FldChk(FBinC, trim(fnameC), rc=rc)) FBinfound = .false.
+       if (.not. shr_nuopc_methods_FB_FldChk(FBinC, trim(fnameC), rc=rc)) then
+          errorname=fnameC
+          FBinfound = .false.
+       end if
     endif
     if (present(FBinD)) then
-       if (.not. shr_nuopc_methods_FB_FldChk(FBinD, trim(fnameD), rc=rc)) FBinfound = .false.
+       if (.not. shr_nuopc_methods_FB_FldChk(FBinD, trim(fnameD), rc=rc)) then
+          errorname=fnameD
+          FBinfound = .false.
+       end if
     endif
     if (present(FBinE)) then
-       if (.not. shr_nuopc_methods_FB_FldChk(FBinE, trim(fnameE), rc=rc)) FBinfound = .false.
+       if (.not. shr_nuopc_methods_FB_FldChk(FBinE, trim(fnameE), rc=rc)) then
+          errorname=fnameE
+          FBinfound = .false.
+       end if
     endif
     if (.not. FBinfound) then
-       call ESMF_LogWrite(trim(subname)//": WARNING field not found in FBin, skipping merge "//trim(fnameout), &
+       call ESMF_LogWrite(trim(subname)//": ERROR field not found in FBin, skipping merge "//trim(errorName), &
             ESMF_LOGMSG_WARNING, line=__LINE__, file=u_FILE_u, rc=dbrc)
+       rc = ESMF_FAILURE
        return
     endif
 
