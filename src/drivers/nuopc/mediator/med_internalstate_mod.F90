@@ -7,7 +7,7 @@ module med_internalstate_mod
   use ESMF              , only : ESMF_RouteHandle, ESMF_FieldBundle, ESMF_State
   use ESMF              , only : ESMF_VM
   use esmFlds           , only : ncomps, nmappers
-  use med_constants_mod , only : CL
+  use med_constants_mod , only : CL, R8
 
   implicit none
   private
@@ -41,6 +41,12 @@ module med_internalstate_mod
        .false., .false., .true. , .false., .false., .false., .false., .false.  ], & ! glc
        shape(med_coupling_allowed)) 
    !   med      atm      lnd      ocn      ice      rof      wav      glc
+
+  type mesh_info_type
+     real(r8), pointer :: areas(:)
+     real(r8), pointer :: lats(:)
+     real(r8), pointer :: lons(:)
+  end type mesh_info_type
 
   ! private internal state to keep instance data
   type InternalStateStruct
@@ -97,6 +103,9 @@ module med_internalstate_mod
     ! Accumulators for import field bundles
     type(ESMF_FieldBundle) :: FBImpAccum(ncomps,ncomps)          ! Accumulator for various components import
     integer                :: FBImpAccumCnt(ncomps)              ! Accumulator counter for each FBImpAccum
+
+    ! Component Mesh info 
+    type(mesh_info_type)    :: mesh_info(ncomps)
 
  end type InternalStateStruct
 

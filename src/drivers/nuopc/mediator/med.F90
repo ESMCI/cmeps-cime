@@ -409,14 +409,13 @@ contains
     use ESMF                  , only : ESMF_LogMsg_Info, ESMF_LogWrite
     use NUOPC                 , only : NUOPC_AddNamespace, NUOPC_Advertise
     use NUOPC                 , only : NUOPC_CompAttributeGet, NUOPC_CompAttributeSet, NUOPC_CompAttributeAdd
-    use med_internalstate_mod , only : InternalState, logunit
+    use med_internalstate_mod , only : InternalState, logunit, mastertask
     use esmFlds               , only : ncomps, compmed, compatm, compocn
     use esmFlds               , only : compice, complnd, comprof, compwav, compglc, compname
     use esmFlds               , only : fldListFr, fldListTo
     use esmFlds               , only : shr_nuopc_fldList_GetNumFlds
     use esmFlds               , only : shr_nuopc_fldList_GetFldInfo
     use esmFldsExchange_mod   , only : esmFldsExchange
-    use med_internalstate_mod , only : mastertask
 
     ! input/output variables
     type(ESMF_GridComp)  :: gcomp
@@ -1573,6 +1572,9 @@ contains
             if (ChkErr(rc,__LINE__,u_FILE_u)) return
             is_local%wrap%FBExpAccumCnt(n1) = 0
 
+            ! Create mesh info data 
+            call med_meshinfo_create(is_local%wrap%FBImpAccum(n1,n1), is_local%wrap%mesh_info(n1), rc=rc)
+            if (ChkErr(rc,__LINE__,u_FILE_u)) return
          endif
 
          ! The following are FBImp and FBImpAccum mapped to different grids.
@@ -2087,6 +2089,82 @@ contains
     endif
 
   end subroutine SetRunClock
+
+  !-----------------------------------------------------------------------------
+  subroutine med_meshinfo_create(FB, mesh_info, rc)
+
+    ! input/output variables
+    type(ESMF_FieldBundle) , intent(in)    :: FB
+    type(mesh_info_type)   , intent(inout) :: mesh_info
+    integer                , intent(out)   :: rc
+
+    ! local variables
+    type(ESMF_Field)      :: lfield 
+    type(ESMF_Mesh)       :: lmesh
+    type(ESMF_Field)      :: elemAreaField
+    type(ESMF_Array)      :: elemAreaArray
+    integer               :: numOwnedElements
+    integer               :: spatialDim
+    real(r8), allocatable :: ownedElemCoords(:)
+    real(r8), pointer     :: dataptr(:)
+    integer               :: n
+    character(len=*),parameter :: subname='(module_MED:med_meshinfo_create)'
+    !-------------------------------------------------------------------------------
+
+    rc= ESMF_SUCCESS
+
+    call shr_nuopc_methods_FB_getFieldN(FB, fieldnum=1, field=lfield, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    call ESMF_FieldGet(lfield, mesh=lmesh, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    call ESMF_MeshGet(lmesh, spatialDim=spatialDim, numOwnedElements=numOwnedElements, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    allocate(ownedElemCoords(spatialDim*numOwnedElements))
+    call ESMF_MeshGet(lmesh, ownedElemCoords=ownedElemCoords)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+
+    ! Allocate mesh_info data
+    allocate(mesh_info%areas(numOwnedElements))
+    allocate(mesh_info%lats(numOwnedElements))
+    allocate(mesh_info%lons(numOwnedElements))
+
+    ! Obtain mesh longitudes and latitudes
+    do n = 1,numOwnedElements
+       mesh_info%lons(n) = ownedElemCoords(2*n-1)
+       mesh_info%lats(n) = ownedElemCoords(2*n)
+    end do
+
+    ! Create an ESMF field object with the right distgrid that will be fill in with the ESMF_MeshGet query
+    ! for the mesh areas
+    elemAreaField = ESMF_FieldCreate(lmesh, ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    call ESMF_FieldGet(elemAreaField, array=elemAreaArray, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+
+    ! Obtain the mesh areas
+    call ESMF_MeshGet(lmesh, elemAreaArray=elemAreaArray, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    call ESMF_ArrayGet(elemAreaArray, farrayptr=dataptr, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+
+    if (size(dataptr) /=  numOwnedElements) then 
+       call ESMF_LogWrite(trim(subname)//": numOwnedElements and size of elemAreaArray do not match", ESMF_LOGMSG_INFO)
+       rc = ESMF_FAILURE
+       return
+    end if
+    do n = 1,numOwnedElements
+       mesh_info%areas(n) = dataptr(n)
+    end do
+
+    deallocate(ownedElemCoords)
+    call ESMF_FieldDestroy(elemAreaField, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    
+  end subroutine med_diag_meshinfo
+
+
+
+  end subroutine med_meshinfo_create
   !-----------------------------------------------------------------------------
 
   subroutine med_finalize(gcomp, rc)
