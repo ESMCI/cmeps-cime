@@ -1385,6 +1385,7 @@ contains
     use med_phases_ocnalb_mod   , only : med_phases_ocnalb_run
     use med_phases_aofluxes_mod , only : med_phases_aofluxes_run
     use med_phases_profile_mod  , only : med_phases_profile
+    use med_diag_mod            , only : med_diag_zero 
     use med_map_mod             , only : med_map_MapNorm_init, med_map_RouteHandles_init
     use med_io_mod              , only : med_io_init
 
@@ -1911,6 +1912,10 @@ contains
        call ESMF_LogWrite(subname//' read_restart = '//trim(cvalue), ESMF_LOGMSG_INFO, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
        read(cvalue,*) read_restart
+
+       ! zero budget data
+       call med_diag_zero(gcomp, mode='all', rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
        if (read_restart) then
          call med_phases_restart_read(gcomp, rc)
