@@ -348,7 +348,7 @@ contains
     call NUOPC_CompAttributeGet(gcomp, name='mesh_ice', value=cvalue, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    Emesh = ESMF_MeshCreate(filename=trim(cvalue), fileformat=ESMF_FILEFORMAT_ESMFMESH, rc=rc)
+    Emesh = ESMF_MeshCreate(filename=trim(cvalue), fileformat=ESMF_FILEFORMAT_ESMFMESH, addUserArea=.true., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (my_task == master_task) then

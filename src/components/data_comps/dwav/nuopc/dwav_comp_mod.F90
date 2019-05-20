@@ -250,9 +250,8 @@ contains
     maxn = 0
     klon = mct_aVect_indexRA(SDWAV%grid%data,'lon')
     do n = 1, lsize
-       domlon(n) = SDWAV%grid%data%rattr(klon,n)
-       err = abs(domlon(n) -  xc(n))
-       if (err > maxerr) then
+       if (abs(mod(SDWAV%grid%data%rattr(klon,n) - xc(n),360.0_R8)) > 1.e-4) then
+          err = abs(SDWAV%grid%data%rattr(klon,n) -  xc(n))
           maxerr = err
           maxn = n
        end if

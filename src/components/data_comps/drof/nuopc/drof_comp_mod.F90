@@ -244,9 +244,12 @@ contains
     ! error check that mesh lats and lons correspond to those on the input domain file
     index_lon = mct_aVect_indexRA(SDROF%grid%data,'lon')
     do n = 1, lsize
-       if (abs( SDROF%grid%data%rattr(index_lon,n) - xc(n)) > 1.e-10) then
-          write(6,*)'ERROR: lon diff = ',abs(SDROF%grid%data%rattr(index_lon,n) -  xc(n)),' too large'
-          call shr_sys_abort()
+       if (abs(mod(SDROF%grid%data%rattr(index_lon,n) - xc(n),360.0_R8)) > 1.e-4) then
+          write(6,*)'WARNING: lon diff = ',&
+               abs(mod(SDROF%grid%data%rattr(index_lon,n) - xc(n),360.0_R8)),' too large'
+          write(6,*)'WARNING: SDROF%grid%data%rattr(index_lon,n)= ',SDROF%grid%data%rattr(index_lon,n)
+          write(6,*)'WARNING: xc(n)                             = ',xc(n)
+          !call shr_sys_abort()
        end if
        !SDROF%grid%data%rattr(index_lon,n) = xc(n) ! overwrite ggrid with mesh data
     end do

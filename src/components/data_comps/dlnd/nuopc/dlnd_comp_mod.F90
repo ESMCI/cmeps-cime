@@ -300,7 +300,7 @@ contains
     klon = mct_aVect_indexRA(SDLND%grid%data,'lon')
     do n = 1, lsize
        domlon = SDLND%grid%data%rattr(klon,n)
-       if (abs( domlon - xc(n)) > 1.e-10 .and. domlon /= 0.0_r8) then
+       if (abs(mod(SDLND%grid%data%rattr(klon,n) - xc(n),360.0_R8)) > 1.e-4) then
           write(6,100) n, domlon, xc(n), abs(xc(n)-domlon)
 100       format('ERROR: DLND n, dom_lon, mesh_lon, diff_lon = ',i6,2(f21.13,3x),d21.5)
           call shr_sys_abort()

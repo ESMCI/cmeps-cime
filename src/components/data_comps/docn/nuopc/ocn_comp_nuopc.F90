@@ -338,7 +338,7 @@ module ocn_comp_nuopc
        write(logunit,*) " obtaining docn mesh from " // trim(cvalue)
     end if
 
-    Emesh = ESMF_MeshCreate(filename=trim(cvalue), fileformat=ESMF_FILEFORMAT_ESMFMESH, rc=rc)
+    Emesh = ESMF_MeshCreate(filename=trim(cvalue), fileformat=ESMF_FILEFORMAT_ESMFMESH, addUserArea=.true., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     !----------------------------------------------------------------------------
