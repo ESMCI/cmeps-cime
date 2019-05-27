@@ -431,6 +431,20 @@
     <desc>yyyymmdd format, sets driver average history date (like REST_DATE)</desc>
   </entry>
 
+  <entry id="BUDGETS">
+    <type>logical</type>
+    <valid_values>TRUE,FALSE</valid_values>
+    <default_value>FALSE</default_value>
+    <values match="last">
+      <value compset="DATM.*_POP\d">TRUE</value>
+      <value compset="CAM.*_POP\d">TRUE</value>
+      <value compset="CAM.*_DOCN%SOM">TRUE</value>
+    </values>
+    <group>run_budgets</group>
+    <file>env_run.xml</file>
+    <desc>logical that turns on diagnostic budgets for driver</desc>
+  </entry>
+
   <entry id="CCSM_CO2_PPMV">
     <type>real</type>
     <valid_values></valid_values>
